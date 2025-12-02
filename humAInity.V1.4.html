@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HumAInity - 文明重燃</title>
+    
+    <!-- 1. 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 2. 引入 React 和 ReactDOM -->
+    <script crossorigin src="https://cdn.bootcdn.net/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+    <script crossorigin src="https://cdn.bootcdn.net/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+    
+    <!-- 3. 引入 Babel -->
+    <script src="https://cdn.bootcdn.net/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    
+    <script>
+        // 配置 Tailwind 主题 - 采用更深沉的“墨与铜”配色
+        if (typeof tailwind !== 'undefined') {
+            tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        paper: '#F2EEE5', // 羊皮纸底色
+                        ink: '#2B2B2B',   // 墨色
+                        stone: { 850: '#1C1917' },
+                        bronze: { 500: '#B08D55', 700: '#8C6B3D' }, // 青铜
+                        terracotta: '#A0522D', // 陶土红
+                    },
+                    fontFamily: {
+                        serif: ['"Noto Serif SC"', '"Songti SC"', 'SimSun', 'serif'],
+                        sans: ['"Noto Sans SC"', 'sans-serif'],
+                    }
+                }
+            }
+            };
+        }
+    </script>
+
+    <style>
+        body { font-family: 'Noto Serif SC', serif; color: #2B2B2B; }
+        h1, h2, h3, h4, h5, h6, .font-serif { font-family: 'Noto Serif SC', serif; }
+        
+        /* 浮动动画 */
+        @keyframes slowFloat {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-6px); }
+        }
+        .animate-float { animation: slowFloat 6s ease-in-out infinite; }
+        
+        /* 纹理叠加 - 增加纸张质感 */
+        .texture-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-image: url('https://www.transparenttextures.com/patterns/natural-paper.png');
+            opacity: 0.4; pointer-events: none; z-index: 9999; mix-blend-mode: multiply;
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* 加载与错误提示样式 */
+        #loading-screen {
+            position: fixed; inset: 0; background: #F2EEE5; z-index: 10000;
+            display: flex; justify-content: center; align-items: center; flex-direction: column;
+            color: #2B2B2B; transition: opacity 0.5s;
+        }
+        .spinner {
+            width: 40px; height: 40px; border: 3px solid #B08D55; border-top-color: transparent;
+            border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-paper text-ink antialiased relative">
+    
+    <div class="texture-overlay"></div>
+
+    <!-- 加载/错误提示遮罩 -->
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <div class="text-2xl font-serif font-bold mb-2 tracking-widest">HumAInity</div>
+        <div class="text-sm opacity-70 italic">历史正在重演...</div>
+    </div>
+    
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        setTimeout(() => {
+            const loader = document.getElementById('loading-screen');
+            if(loader) {
+                loader.style.opacity = '0';
+                setTimeout(() => loader.remove(), 500);
+            }
+        }, 800);
+
+        // --- SVG Icons (古典化替换) ---
+        const Icons = {
+            Brain: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z"/></svg>,
+            Sparkles: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 9v4"/></svg>,
+            Globe: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="12" cy="12" r="10"/><line x1="2" x2="22" y1="12" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"/></svg>,
+            Users: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+            ArrowRight: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>,
+            Pickaxe: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M14.5 5.5C14 5.5 9 7 9 7s-1.5 5-1.5 5.5S7 11 7 11s5 1.5 5.5 1.5S14 11 14 11s1.5-5 1.5-5.5S15 5 14.5 5.5Z"/><path d="M2.9 13c-.5.6-.6 1.4 0 2l7.2 7.2c.6.5 1.4.5 2 0"/><path d="m11 11-1.5 1.5"/><path d="m14.5 5.5-8.7 8.7"/></svg>,
+            Shield: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>,
+            Menu: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>,
+            X: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>,
+            Sword: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5" /><line x1="13" y1="19" x2="19" y2="13" /><line x1="16" y1="16" x2="20" y2="20" /><line x1="19" y1="21" x2="21" y2="19" /></svg>,
+            Tent: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M3.5 21 14 3"/><path d="M20.5 21 10 3"/><path d="M15.5 21 12 15l-3.5 6"/><path d="M2 21h20"/></svg>,
+            Coins: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="8" cy="8" r="6" /><path d="M18.09 10.37A6 6 0 1 1 10.34 18" /><path d="M7 6h1v4" /><path d="m16.71 13.88.7 .71-2.82 2.82" /></svg>,
+            Quill: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>,
+            ScrollText: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M8 21h12a2 2 0 0 0 2-2v-2H10v2a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v3h4"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/></svg>,
+            MessageSquare: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+            Mic: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="23"/><line x1="8" x2="16" y1="23" y2="23"/></svg>,
+            Flag: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>,
+            Map: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" x2="9" y1="3" y2="18"/><line x1="15" x2="15" y1="6" y2="21"/></svg>
+        };
+
+        // --- Logo Component ---
+        const Logo = ({ size = "md" }) => {
+            const sizeClasses = size === "lg" ? "w-16 h-16" : "w-10 h-10";
+            const fontSize = size === "lg" ? "text-2xl" : "text-xl";
+            return (
+                <div className="relative group cursor-pointer">
+                    <div className={`${sizeClasses} bg-ink text-paper rounded-sm border border-bronze-500 flex items-center justify-center shadow-md relative z-10`}>
+                        <span className={`text-bronze-500 font-serif font-bold ${fontSize}`}>H</span>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Navbar ---
+        const Navbar = () => {
+            const [isOpen, setIsOpen] = useState(false);
+            const [scrolled, setScrolled] = useState(false);
+            useEffect(() => {
+                const handleScroll = () => setScrolled(window.scrollY > 50);
+                window.addEventListener('scroll', handleScroll);
+                return () => window.removeEventListener('scroll', handleScroll);
+            }, []);
+
+            const navLinks = ['愿景', '游戏特色', '核心体验', '路线图', '商业&招募'];
+            const navIds = ['vision', 'features', 'gameplay', 'roadmap', 'business'];
+
+            return (
+                <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${scrolled ? 'bg-paper/95 backdrop-blur-md shadow-md py-3 border-b border-bronze-500/20' : 'bg-transparent py-6'}`}>
+                    <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
+                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>
+                            <Logo />
+                            <div className="flex flex-col">
+                                <span className="text-ink font-serif font-bold tracking-widest text-xl leading-none">Hum<span className="text-bronze-700">AI</span>nity</span>
+                            </div>
+                        </div>
+                        <div className="hidden md:flex items-center gap-6 text-sm font-bold text-stone-600 font-serif tracking-wide">
+                            {navLinks.map((item, i) => (
+                                <a key={i} href={`#${navIds[i]}`} className="hover:text-bronze-700 transition-colors relative group py-2">
+                                    {item}
+                                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-0 h-0.5 bg-bronze-700 transition-all duration-300 group-hover:w-full"></span>
+                                </a>
+                            ))}
+                            <button className="bg-ink hover:bg-stone-700 text-paper px-6 py-2 rounded-sm transition-all shadow-lg font-serif tracking-wider border border-transparent hover:border-bronze-500">
+                                加入先锋测试
+                            </button>
+                        </div>
+                        <button className="md:hidden text-ink" onClick={() => setIsOpen(!isOpen)}>
+                            {isOpen ? <Icons.X /> : <Icons.Menu />}
+                        </button>
+                    </div>
+                    <div className={`md:hidden bg-paper border-b border-bronze-500/20 overflow-hidden transition-all duration-300 ${isOpen ? 'max-h-80 opacity-100' : 'max-h-0 opacity-0'}`}>
+                        <div className="flex flex-col p-6 gap-4 text-stone-700 font-serif">
+                            {navLinks.map((item, i) => (
+                                <a key={i} href={`#${navIds[i]}`} onClick={() => setIsOpen(false)} className="block py-2 hover:text-bronze-700 border-b border-stone-300/50 last:border-0">{item}</a>
+                            ))}
+                        </div>
+                    </div>
+                </nav>
+            );
+        };
+
+        // --- Hero Section ---
+        const Hero = () => {
+            const [loaded, setLoaded] = useState(false);
+            useEffect(() => setLoaded(true), []);
+
+            const whitepaperLink = "https://publish.obsidian.md/cooperzheng/02_%E5%B7%A5%E4%BD%9C%E5%8F%B0/25_BraveNewWorld/A_%E6%B8%B8%E6%88%8F%E8%AE%BE%E8%AE%A1/20251120_%E7%99%BD%E7%9A%AE%E4%B9%A6#1.+%E6%A0%B8%E5%BF%83%E6%84%BF%E6%99%AF+(Core+Vision)";
+
+            return (
+                <section id="vision" className="relative min-h-screen flex items-center justify-center overflow-hidden bg-stone-200 pt-16 border-b-4 border-double border-stone-300">
+                    <div className="absolute inset-0 opacity-20 mix-blend-multiply filter sepia-[.4] contrast-125" style={{backgroundImage: 'url("https://images.unsplash.com/photo-1475080612764-c0c0f4175904?q=80&w=2074&auto=format&fit=crop")', backgroundSize: 'cover', backgroundPosition: 'center'}}></div>
+                    <div className="absolute inset-0 bg-gradient-to-b from-paper/40 via-paper/70 to-paper"></div>
+                    
+                    <div className="relative z-10 container mx-auto px-6 text-center">
+                        <div className={`transform transition-all duration-1000 ${loaded ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0'}`}>
+                            <div className="inline-block mb-8 animate-float">
+                                <span className="py-2 px-6 border-y border-stone-400 text-stone-600 text-xs font-bold font-serif tracking-[0.3em] uppercase">200 B.C. - The Reconstruction</span>
+                            </div>
+                            <h1 className="text-5xl md:text-7xl lg:text-8xl font-serif font-black text-ink mb-8 tracking-tight leading-tight drop-shadow-sm">
+                                文明<span className="text-bronze-700 relative inline-block">重燃</span>
+                            </h1>
+                            <p className="text-lg md:text-xl text-stone-700 max-w-2xl mx-auto mb-12 leading-relaxed font-serif italic border-l-2 border-bronze-500/30 pl-6 md:border-none md:pl-0">
+                                “你的语言，就是文明的法典。你将通过<span className="border-b border-bronze-500">自然语言</span>指引拥有独立人格的智能体行动,在1:1真实比例的废土地球上重燃人类文明的火种。”
+                            </p>
+                            <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+                                <a href={whitepaperLink} target="_blank" className="w-full sm:w-auto px-10 py-4 bg-ink hover:bg-stone-800 text-paper rounded-sm font-serif font-bold text-lg shadow-xl shadow-stone-900/20 transition-all hover:-translate-y-1 flex items-center justify-center gap-3 group border border-transparent">
+                                    阅读白皮书
+                                    <Icons.ArrowRight className="w-5 h-5 text-bronze-500 group-hover:translate-x-1 transition-transform" />
+                                </a>
+                                <button className="w-full sm:w-auto px-10 py-4 bg-transparent border-2 border-stone-400 hover:border-ink text-ink rounded-sm font-serif font-bold text-lg backdrop-blur-sm transition-all hover:-translate-y-1 shadow-sm hover:bg-paper/50">
+                                    观看实机演示
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        };
+
+        const FeatureCard = ({ icon: Icon, title, desc, color }) => (
+            <div className="p-8 bg-white border border-stone-200 shadow-[0_4px_20px_-5px_rgba(0,0,0,0.05)] hover:shadow-[0_10px_30px_-5px_rgba(139,69,19,0.15)] transition-all duration-500 hover:-translate-y-2 group relative overflow-hidden h-full flex flex-col">
+                <div className="absolute top-0 left-0 w-10 h-10 border-t-2 border-l-2 border-stone-200 group-hover:border-bronze-500 transition-colors"></div>
+                <div className="absolute bottom-0 right-0 w-10 h-10 border-b-2 border-r-2 border-stone-200 group-hover:border-bronze-500 transition-colors"></div>
+                
+                <div className={`w-16 h-16 mb-6 flex items-center justify-center rounded-full bg-stone-50 group-hover:bg-[#F5F0E6] transition-colors shrink-0`}>
+                    <Icon className={`w-8 h-8 text-stone-600 group-hover:text-bronze-700 transition-colors`} />
+                </div>
+                <h3 className="text-3xl font-serif font-bold text-ink mb-4 group-hover:text-bronze-800 transition-colors">{title}</h3>
+                <p className="text-stone-600 leading-relaxed text-lg font-serif flex-grow">{desc}</p>
+            </div>
+        );
+
+        const FeaturesSection = () => {
+            return (
+                <div id="features" className="container mx-auto px-6 py-24 border-b border-stone-200">
+                    {/* Row 1: Game Features - REFINED COPY */}
+                    <div className="mb-20">
+                        <div className="text-center mb-12">
+                            <h3 className="text-bronze-700 font-bold tracking-[0.2em] uppercase text-sm font-serif mb-3 block">— Game Features —</h3>
+                            <h2 className="text-4xl md:text-5xl font-serif font-bold text-ink">游戏特性</h2>
+                        </div>
+                        <div className="grid md:grid-cols-3 gap-8">
+                            <FeatureCard icon={Icons.Globe} title="1:1 动态地球" desc="这并非一张静态地图，而是一个基于真实物理法则运转的 1:1 行星。所有玩家身处同一颗星球，从季风气候到地质变迁，你的每一次筑坝截流或开山毁林，都将在卫星级尺度上留下永久的地理伤痕。" />
+                            <FeatureCard icon={Icons.Users} title="社会涌现" desc="没有固定剧本。你带领着智能体们谱写属于你们的历史。宗教的诞生可能源于一次偶然的雷击，战争的爆发可能始于一场饥荒。你面对的是一个混乱、鲜活且不可预测的真实文明。" />
+                            <FeatureCard icon={Icons.Pickaxe} title="文明际会" desc="你并不孤独。成千上万的玩家文明散落在尼罗河、黄河与安第斯山脉的摇篮中。 当探索队跨越大陆，第一次遇见来自远方的异族旗帜时，是选择贸易互通，还是拔剑征服？这将是一场跨越两千年的全人类博弈。" />
+                        </div>
+                    </div>
+
+                    {/* Row 2: Core Experience */}
+                    <div>
+                        <div className="text-center mb-12">
+                            <h3 className="text-bronze-700 font-bold tracking-[0.2em] uppercase text-sm font-serif mb-3 block">— Core Experience —</h3>
+                            <h2 className="text-4xl md:text-5xl font-serif font-bold text-ink">核心体验</h2>
+                        </div>
+                        <div className="grid md:grid-cols-3 gap-8">
+                            <FeatureCard icon={Icons.Mic} title="沟通驱动" desc="你不再是点击菜单的管理员，而是通过自然语言召开会议、制定愿景。真正的领袖，是指出方向，然后与众人一起寻找出路的人。" />
+                            <FeatureCard icon={Icons.Flag} title="身先士卒" desc="你需要亲自带领智能体小队探索未知废土、开拓新据点、并在危机中指挥战斗。真正的力量，不是你手中的剑，而是你声音中的信念。" />
+                            <FeatureCard icon={Icons.Map} title="组织演化" desc="选拔核心团队，构建并不断迭代聚落的组织架构。尝试从部落制向共和制演变，确立独特的文明性格。当面对异域文明的使者时，你的制度与文化将是比城墙更坚固的防线。" />
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Comparison Section (Updated with Fixes & Mind Layer Visualization) ---
+        const ComparisonSection = () => {
+            const [activeScene, setActiveScene] = useState('domestic'); 
+
+            // Data structure for the dialogue with "Mind Layer" thoughts
+            const scenarios = {
+                domestic: [
+                    {
+                        id: 1,
+                        speaker: "me",
+                        name: "我",
+                        text: "冬天快到了，部落需要稳定的水源，哪怕河水结冰也要能喝到水。",
+                        thoughts: []
+                    },
+                    {
+                        id: 2,
+                        speaker: "agent",
+                        name: "王五",
+                        text: "领袖！我记得西边山脚有种蕨类长得很茂盛，底下可能有暗河。与其去河边凿冰，不如我们在那挖一口深井？",
+                        thoughts: [
+                            { type: 'mythos', label: '✧ 科技判断', content: ' [深井技术] -> 无法解锁' },
+                            { type: 'agent', label: '⚡ 智能体能力', content: '[草药学] + [熟悉地形]' }
+                        ]
+                    },
+                    {
+                        id: 3,
+                        speaker: "me",
+                        name: "我",
+                        text: "是个好主意。但那里土质松软，挖的时候要注意加固，别塌方了。",
+                        thoughts: [
+                             { type: 'logos', label: '⚖️ Logos 法则', content: '物理校验: 风险 [塌方] -> 需 [支护]' }
+                        ]
+                    },
+                    {
+                        id: 4,
+                        speaker: "agent",
+                        name: "王五",
+                        text: "明白了！我会带上老李，用石头把井壁砌好，保证万无一失！",
+                        thoughts: [
+                            { type: 'logos', label: '⚖️ 科技判断', content: '方案修正: [石砌井壁] -> 可行' }
+                        ]
+                    }
+                ],
+                expedition: [
+                    {
+                        id: 1,
+                        speaker: "me",
+                        name: "我",
+                        text: "前方有一头变异野猪。王五去吸引注意，老六在侧翼布置陷阱，保持安静！",
+                        thoughts: []
+                    },
+                    {
+                        id: 2,
+                        speaker: "agent",
+                        name: "老六",
+                        text: "它...它看起来太凶猛了，我手在抖，陷阱布置不好...",
+                        thoughts: [
+                            { type: 'agent', label: '⚡ 智能体心理', content: '性格: [胆小] -> 触发状态: [恐惧]' }
+                        ]
+                    },
+                    {
+                        id: 3,
+                        speaker: "me",
+                        name: "我",
+                        text: "老六别怕！相信你的技术，往树上爬找掩护！王五，给老六争取时间！",
+                        thoughts: [
+                            { type: 'mythos', label: '🔥 Mythos 叙事', content: '动态张力: [高] -> 关键抉择时刻' }
+                        ]
+                    },
+                    {
+                        id: 4,
+                        speaker: "agent",
+                        name: "王五",
+                        text: "吼！看这里！畜生，冲我来！",
+                        thoughts: [
+                            { type: 'agent', label: '⚡ 智能体心理', content: '性格: [鲁莽] -> 强制执行: [嘲讽]' }
+                        ]
+                    }
+                ]
+            };
+
+            return (
+                <section id="gameplay" className="py-24 bg-paper relative border-b border-stone-200">
+                    <div className="container mx-auto px-6">
+                        <div className="text-center mb-20">
+                            <span className="text-bronze-700 font-bold tracking-widest uppercase text-xs font-serif mb-3 block">— The Shift —</span>
+                            <h2 className="text-4xl md:text-5xl font-serif font-bold text-ink mb-6">核心体验切片</h2>
+                            <p className="text-stone-500 font-serif italic max-w-xl mx-auto">从“点击建造”的机械指令，到“愿景沟通”的领袖艺术。</p>
+                        </div>
+
+                        <div className="grid md:grid-cols-2 gap-0 items-stretch max-w-5xl mx-auto border-4 border-double border-stone-300 bg-stone-100 shadow-2xl">
+                            {/* Left: The Problem (Styled as Old Scroll/Draft) */}
+                            <div className="p-10 bg-[#E8E4D9] shadow-inner relative border-r border-stone-300 flex flex-col">
+                                <div className="absolute top-6 right-6 px-3 py-1 bg-stone-300 text-stone-600 text-xs font-bold uppercase tracking-wide font-serif">Old Ways</div>
+                                <h3 className="text-2xl font-serif font-bold text-stone-700 mb-8">机械指令</h3>
+                                <div className="bg-stone-300/50 p-4 rounded border border-stone-400/30 font-serif text-xs text-stone-600 space-y-3 flex-1 grayscale">
+                                    <div className="flex justify-between border-b border-stone-400/20 pb-2 mb-2">
+                                        <span>TASK_PANEL</span>
+                                        <span>[-] [x]</span>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div className="bg-[#F2EEE5] p-2 border border-stone-400 flex items-center justify-between">
+                                            <span>[任务] 建造水井</span>
+                                            <span className="text-stone-500">0/1</span>
+                                        </div>
+                                        <div className="bg-[#F2EEE5] p-2 border border-stone-400 flex items-center justify-between opacity-60">
+                                            <span>[动作] 采集木材</span>
+                                            <span>(点击 x10)</span>
+                                        </div>
+                                        <div className="mt-4 p-2 bg-stone-400 text-stone-100 text-center font-bold">
+                                            资源不足
+                                        </div>
+                                    </div>
+                                </div>
+                                <p className="mt-6 text-stone-400 text-sm font-serif italic text-center">"基于UI的机械指令，没有情感和思考..."</p>
+                            </div>
+
+                            {/* Right: The Solution (Styled as Living Dialogue) */}
+                            <div className="p-10 bg-white relative flex flex-col">
+                                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-bronze-500 to-bronze-700"></div>
+                                <div className="absolute top-6 right-6 px-3 py-1 bg-bronze-100 text-bronze-800 text-xs font-bold uppercase tracking-wide font-serif">New Era</div>
+                                <h3 className="text-2xl font-serif font-bold text-ink mb-6">愿景领袖</h3>
+                                
+                                {/* Scene Switcher Buttons - Fixed text visibility by using explicit colors */}
+                                <div className="flex gap-2 mb-6 font-serif">
+                                    <button 
+                                        onClick={() => setActiveScene('domestic')}
+                                        className={`px-4 py-2 text-xs font-bold border-2 transition-all duration-300 whitespace-nowrap text-center flex-shrink-0 ${
+                                            activeScene === 'domestic' 
+                                                ? 'bg-[#8C6B3D] text-white border-[#8C6B3D] shadow-md' 
+                                                : 'bg-white text-[#2B2B2B] border-[#B08D55] hover:bg-[#F2EEE5]'
+                                        }`}
+                                        style={{minWidth: '150px'}}
+                                    >
+                                        <span className="block">内政：寻找水源</span>
+                                    </button>
+                                    <button 
+                                        onClick={() => setActiveScene('expedition')}
+                                        className={`px-4 py-2 text-xs font-bold border-2 transition-all duration-300 whitespace-nowrap text-center flex-shrink-0 ${
+                                            activeScene === 'expedition' 
+                                                ? 'bg-[#8C6B3D] text-white border-[#8C6B3D] shadow-md' 
+                                                : 'bg-white text-[#2B2B2B] border-[#B08D55] hover:bg-[#F2EEE5]'
+                                        }`}
+                                        style={{minWidth: '150px'}}
+                                    >
+                                        <span className="block">外出：围猎危机</span>
+                                    </button>
+                                </div>
+
+                                {/* Dialogue Area with Dynamic Thoughts */}
+                                <div className="space-y-6 flex-1 overflow-y-auto pr-2 max-h-[400px] no-scrollbar font-serif relative">
+                                    {scenarios[activeScene].map((line) => (
+                                        <div key={line.id} className="group animate-float" style={{animationDuration: '4s', animationDelay: `${line.id * 0.5}s`}}>
+                                            <div className={`flex gap-3 ${line.speaker === 'agent' ? 'flex-row-reverse' : ''}`}>
+                                                {/* Avatar */}
+                                                <div className={`w-8 h-8 rounded border flex items-center justify-center font-serif text-xs shrink-0 font-bold ${
+                                                    line.speaker === 'me' 
+                                                    ? 'border-stone-300 bg-stone-100 text-stone-800' 
+                                                    : 'border-[#B08D55] bg-[#F9F5F0] text-[#8C6B3D]'
+                                                }`}>
+                                                    {line.name}
+                                                </div>
+
+                                                {/* Bubble */}
+                                                <div className={`relative max-w-[80%] p-3 text-sm border shadow-sm transition-all duration-500 ${
+                                                    line.speaker === 'me'
+                                                    ? 'bg-stone-50 text-stone-800 border-stone-200 italic rounded-tr-lg rounded-bl-lg rounded-br-lg'
+                                                    : 'bg-[#F9F5F0] text-[#2B2B2B] border-[#B08D55] rounded-tl-lg rounded-bl-lg rounded-br-lg'
+                                                }`}>
+                                                    {line.text}
+                                                </div>
+                                            </div>
+
+                                            {/* Mind Layer (Thoughts) - Appears below the bubble as annotations */}
+                                            {line.thoughts.length > 0 && (
+                                                <div className={`mt-2 flex flex-col gap-1 ${line.speaker === 'agent' ? 'items-end pr-11' : 'items-start pl-11'}`}>
+                                                    {line.thoughts.map((thought, idx) => (
+                                                        <div key={idx} className={`text-[10px] px-2 py-1 rounded border shadow-sm ${
+                                                            thought.type === 'mythos' ? 'bg-terracotta/10 text-terracotta border-terracotta/30' :
+                                                            thought.type === 'logos' ? 'bg-stone-200 text-stone-600 border-stone-300' :
+                                                            'bg-[#F2EEE5] text-[#8C6B3D] border-[#B08D55]'
+                                                        }`}>
+                                                            <span className="font-bold mr-1">{thought.label}:</span>
+                                                            {thought.content}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                                
+                                <div className="mt-4 pt-4 border-t border-stone-100 text-center">
+                                    <p className="text-[#8C6B3D] opacity-60 text-xs font-serif italic">
+                                        *基于自然语言进行沟通，引导智能体进行思考和行动
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        };
+
+        // --- Core Loop ---
+        const CoreLoop = () => {
+            const steps = [
+                { id: 1, title: "提出愿景", sub: "Propose Vision", icon: "🗣️", desc: "用自然语言描绘目标。 你不需要寻找“建造”按钮，只需告诉族人：“冬天快到了，我们需要温暖的住所”，或者“去河边看看有没有鱼”。" },
+                { id: 2, title: "时代限制", sub: "Define", icon: "⚖️", desc: "物理法则与时代限制。 世界会基于真实的物理逻辑回应你。在石器时代，你无法凭空造出枪械；没有水源，你也无法强行开垦农田。" }, 
+                { id: 3, title: "群策群力", sub: "Refinement", icon: "📜", desc: "智能体提供具体方案。 你的子民不是机器。猎人会建议在哪里设伏，工匠会提出更省料的建造图纸。你只需要从他们的提案中做出明智的裁决。" },
+                { id: 4, title: "自主执行", sub: "Execution", icon: "⚡", desc: "告别保姆式的微操。 一旦方案敲定，族人会根据性格与能力自动分工协作。你只需在山顶俯瞰，看着你的蓝图在他们手中一点点变为现实。" },
+                { id: 5, title: "文明沉淀", sub: "Evolution", icon: "🌱", desc: "决策塑造文明性格。 你的每一次成功或失败都会被铭记。崇尚武力的决策会培养出骁勇的战士，重视技术的决策将点亮科技的火种。" } 
+            ];
+
+            return (
+                <section id="core-loop" className="py-20 pb-48 bg-[#EFE9DE] border-b border-stone-200">
+                    <div className="container mx-auto px-6">
+                        <div className="text-center mb-16">
+                            <h2 className="text-3xl md:text-4xl font-serif font-bold text-ink mb-4">玩家体验循环</h2>
+                            <div className="w-20 h-1 bg-bronze-500 mx-auto"></div>
+                        </div>
+                        
+                        <div className="flex flex-wrap justify-center gap-4 md:gap-6">
+                            {steps.map((step, i) => (
+                                <div key={i} className="flex items-center">
+                                    <div className="relative group w-44 md:w-56 p-2 text-center hover:-translate-y-2 transition-transform duration-300 cursor-default">
+                                        <div className="w-24 h-24 mx-auto bg-white border-2 border-stone-300 rounded-full flex items-center justify-center text-5xl mb-5 shadow-sm group-hover:border-bronze-500 group-hover:shadow-md transition-all relative z-20">
+                                            {step.icon}
+                                        </div>
+                                        <h4 className="font-serif font-bold text-2xl text-stone-800 mb-1">{step.title}</h4>
+                                        <span className="text-xs uppercase tracking-wider text-stone-500 font-serif block mb-2">{step.sub}</span>
+                                        
+                                        {/* Hover Card */}
+                                        <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 absolute left-1/2 -translate-x-1/2 top-[100%] w-72 bg-white p-5 border border-stone-200 rounded shadow-xl z-50 pointer-events-none">
+                                            <p className="text-base text-stone-600 leading-relaxed font-serif text-left">
+                                                {step.desc}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    {i < steps.length - 1 && (
+                                        <div className="hidden md:block w-6 md:w-10 h-0.5 bg-stone-300/50 mt-[-90px]"></div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+            );
+        };
+
+        // --- Dual Core System ---
+        const DualCoreSystem = () => {
+            return (
+                <section id="dual-core" className="py-24 bg-[#1A1816] relative overflow-hidden border-t-4 border-bronze-700">
+                    <div className="absolute inset-0 opacity-5" style={{backgroundImage: 'url("https://www.transparenttextures.com/patterns/black-scales.png")'}}></div>
+                    <div className="container mx-auto px-6 relative z-10">
+                        <div className="flex flex-col md:flex-row justify-between items-end mb-16 gap-8 text-center md:text-left">
+                            <div className="max-w-2xl">
+                                <span className="text-bronze-500 font-bold tracking-[0.2em] uppercase text-sm font-serif">The Gemini Core</span>
+                                <h2 className="text-4xl md:text-6xl font-serif font-bold text-stone-100 mt-4">双子中枢</h2>
+                                <p className="text-stone-400 mt-6 text-lg font-serif italic">文明的左右脑。理性限制边界，感性赋予灵魂。</p>
+                            </div>
+                            <div className="hidden md:block w-32 h-1 bg-stone-700"></div>
+                        </div>
+                        <div className="grid lg:grid-cols-2 gap-12">
+                            {/* Logos */}
+                            <div className="bg-stone-800/50 border border-stone-600 p-10 relative overflow-hidden group hover:bg-stone-800 transition-colors">
+                                <div className="absolute top-0 right-0 p-10 opacity-5 text-stone-500"><Icons.Brain size={120} strokeWidth={0.5} /></div>
+                                <div className="relative z-10">
+                                    <div className="flex items-center gap-4 mb-8">
+                                        <div className="p-4 bg-stone-700 text-stone-300 border border-stone-500"><Icons.Brain className="w-8 h-8" /></div>
+                                        <h3 className="text-3xl font-serif font-bold text-stone-200">Logos <span className="text-base font-normal text-stone-400 ml-2 italic">理性中枢</span></h3>
+                                    </div>
+                                    <ul className="space-y-6">
+                                        <li className="flex gap-4 items-start"><Icons.Shield className="w-6 h-6 text-stone-400 shrink-0 mt-1" /><div><strong className="text-stone-200 block font-serif mb-1">知识屏蔽 (Shielding)</strong><span className="text-stone-400 text-sm font-serif">防止石器时代出现内燃机，维护历史逻辑的真实性。</span></div></li>
+                                        <li className="flex gap-4 items-start"><Icons.Quill className="w-6 h-6 text-stone-400 shrink-0 mt-1" /><div><strong className="text-stone-200 block font-serif mb-1">愿景锚定 (Anchoring)</strong><span className="text-stone-400 text-sm font-serif">将模糊的愿景翻译为可执行的物理参数，让指令落地。</span></div></li>
+                                    </ul>
+                                </div>
+                            </div>
+                            {/* Mythos */}
+                            <div className="bg-gradient-to-br from-[#2A1A10] to-[#1A100C] border border-bronze-900/50 p-10 relative overflow-hidden group hover:border-bronze-700 transition-colors">
+                                <div className="absolute top-0 right-0 p-10 opacity-10 text-bronze-500"><Icons.Sparkles size={120} strokeWidth={0.5} /></div>
+                                <div className="relative z-10">
+                                    <div className="flex items-center gap-4 mb-8">
+                                        <div className="p-4 bg-[#2A1A10]/60 text-[#B08D55] border border-[#5C4033]"><Icons.Sparkles className="w-8 h-8" /></div>
+                                        <h3 className="text-3xl font-serif font-bold text-[#F2EEE5]">Mythos <span className="text-base font-normal text-[#B08D55] ml-2 italic">叙事之心</span></h3>
+                                    </div>
+                                    <ul className="space-y-6">
+                                        <li className="flex gap-4 items-start"><Icons.ScrollText className="w-6 h-6 text-[#B08D55] shrink-0 mt-1" /><div><strong className="text-[#E6DCC9] block font-serif mb-1">动态张力 (Tension)</strong><span className="text-[#B08D55] opacity-90 text-sm font-serif">拒绝垃圾时间。在文明平淡时制造危机，在绝境时给予希望。</span></div></li>
+                                        <li className="flex gap-4 items-start"><Icons.MessageSquare className="w-6 h-6 text-[#B08D55] shrink-0 mt-1" /><div><strong className="text-[#E6DCC9] block font-serif mb-1">灵感植入 (Inception)</strong><span className="text-[#B08D55] opacity-90 text-sm font-serif">通过智能体之口，向玩家传递破局的关键灵感。</span></div></li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        };
+
+        // --- Roadmap ---
+        const Roadmap = () => {
+            const steps = [
+                { phase: "Phase I", time: "3 Months", title: "部落的脉动 (MVP版本)", desc: "预制的黄河流域的部落，10-20名智能体。验证最重要的自然语言沟通和自运转聚落。" },
+                { phase: "Phase II", time: "+ 3 Months", title: "200 B.C.铁器时代 (垂直切片)", desc: "锁定铁器时代成熟期。30+ 智能体，社会分工与层级涌现，双子中枢完整上线。" },
+                { phase: "Phase III", time: "+ 6 Months", title: "单人体验版本(Early Access)", desc: "Steam EA 发布。开放 1-2 个时代跨度，PCG 区域地图，单机沉浸式演化。" },
+                { phase: "Phase IV", time: "+ 12 Months", title: "文明共存(联机功能)", desc: "验证“多文明社交博弈”。引入基于房间的多人模式。实现贸易、结盟、战争以及不同文明参数的碰撞。" },
+                { phase: "Phase V", time: "Long Term", title: "真实地球(终极形态)", desc: "真实的物理地球，不可回档的人类历史重演。" },
+            ];
+
+            return (
+                <section id="roadmap" className="py-24 bg-paper border-b border-stone-200">
+                    <div className="container mx-auto px-6">
+                        <div className="text-center mb-20">
+                            <h2 className="text-3xl md:text-4xl font-serif font-bold text-ink mb-4">文明演进图谱</h2>
+                            <div className="w-24 h-1 bg-bronze-600 mx-auto"></div>
+                        </div>
+                        <div className="relative max-w-4xl mx-auto space-y-12">
+                            <div className="absolute left-[15px] md:left-1/2 top-0 bottom-0 w-px bg-stone-300 md:-translate-x-1/2"></div>
+                            {steps.map((step, index) => (
+                                <React.Fragment key={index}>
+                                    <div className={`relative flex flex-col md:flex-row items-start md:items-center gap-8 ${index % 2 === 0 ? 'md:flex-row-reverse' : ''}`}>
+                                        <div className="absolute left-[11px] md:left-1/2 top-1 md:top-1/2 w-2 h-2 rounded-full bg-stone-100 border-2 border-stone-400 z-10 md:-translate-x-1/2 md:-translate-y-1/2 shadow-[0_0_0_4px_#F2EEE5]">
+                                            {index === 0 && <div className="absolute inset-0 bg-bronze-600 rounded-full animate-ping opacity-75"></div>}
+                                            {index === 0 && <div className="absolute inset-0 bg-bronze-600 rounded-full"></div>}
+                                        </div>
+                                        <div className={`ml-10 md:ml-0 md:w-1/2 ${index % 2 === 0 ? 'md:pl-12' : 'md:pr-12 md:text-right'}`}>
+                                            <div className="flex items-center gap-3 mb-2 md:justify-end" style={{justifyContent: index % 2 === 0 ? 'flex-start' : undefined}}>
+                                                <span className={`text-base font-bold tracking-widest uppercase ${index === 0 ? 'text-bronze-600' : 'text-stone-400'}`}>{step.phase}</span>
+                                                <span className="text-sm bg-stone-200 px-2 py-0.5 rounded text-stone-600 font-serif">{step.time}</span>
+                                            </div>
+                                            <h3 className={`text-3xl font-serif font-bold mb-3 ${index === 0 ? 'text-ink' : 'text-stone-700'}`}>{step.title}</h3>
+                                            <p className="text-lg text-stone-600 leading-relaxed font-serif">{step.desc}</p>
+                                        </div>
+                                    </div>
+                                    {/* Goal Line Divider */}
+                                    {index === 2 && (
+                                        <div className="relative py-12">
+                                            <div className="absolute left-0 right-0 top-1/2 border-t-2 border-dashed border-rust/30"></div>
+                                            <div className="relative z-10 text-center">
+                                                <span className="bg-paper px-6 py-2 text-base font-bold text-rust border border-rust/20 rounded-full shadow-sm font-serif">--- 训练营目标分割线 (Bootcamp Goal Line: 1 Year) ---</span>
+                                                <p className="mt-4 text-base text-rust/80 max-w-2xl mx-auto bg-paper/90 p-4 rounded font-serif shadow-sm">在此节点，我们将完成核心玩法的闭环验证与单机产品的 Early Access 发布，达成训练营的结项要求。此版本美术风格为类文明的俯视角风格化写实。后续里程碑为长线开发规划。</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </React.Fragment>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+            );
+        };
+
+        const ArtStyleSection = () => {
+            return (
+                <section className="py-24 bg-[#E6E0D4] border-b border-stone-300 relative overflow-hidden">
+                    {/* Background Decoration */}
+                    <div className="absolute top-0 left-0 w-full h-20 bg-gradient-to-b from-[#EFE9DE] to-transparent"></div>
+                    
+                    <div className="container mx-auto px-6 relative z-10">
+                        <div className="text-center mb-20">
+                            <h2 className="text-4xl md:text-5xl font-serif font-bold text-ink mb-6">美术风格演进</h2>
+                            <div className="w-24 h-1 bg-bronze-600 mx-auto"></div>
+                            <p className="mt-6 text-xl text-stone-600 font-serif max-w-3xl mx-auto italic">
+                                "从像素的点阵中诞生，向着真实呼吸的世界进化。"
+                            </p>
+                        </div>
+                        
+                        <div className="grid md:grid-cols-2 gap-12 lg:gap-20 max-w-6xl mx-auto items-center">
+                            {/* Left: Prototype */}
+                            <div className="group relative">
+                                <div className="absolute -inset-4 bg-stone-300/50 rounded-lg blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
+                                <div className="relative bg-[#F2EEE5] p-3 border-2 border-stone-300 shadow-xl transform transition-all duration-500 group-hover:-translate-y-2">
+                                    <div className="aspect-video overflow-hidden bg-black relative border border-stone-200">
+                                        <img src="https://img.3dmgame.com/uploads/images/news/20190527/1558922627_414690.jpg" alt="Prototype Style" className="object-cover w-full h-full opacity-80 group-hover:opacity-100 transition-all duration-500 grayscale group-hover:grayscale-0" />
+                                        <div className="absolute top-4 left-4">
+                                            <span className="bg-stone-800 text-white px-3 py-1 text-xs font-bold tracking-widest uppercase shadow-md">Phase I: Prototype</span>
+                                        </div>
+                                    </div>
+                                    <div className="pt-6 pb-2 text-center">
+                                        <h3 className="text-2xl font-serif font-bold text-stone-700 mb-2">复古像素原型</h3>
+                                        <p className="text-stone-500 font-serif text-base">专注于核心 Gameplay 验证。高辨识度，低资产成本，快速迭代。</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Right: Target */}
+                            <div className="group relative">
+                                <div className="absolute -inset-4 bg-bronze-200/50 rounded-lg blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
+                                <div className="relative bg-white p-3 border-2 border-bronze-400 shadow-2xl transform transition-all duration-500 group-hover:-translate-y-2 scale-105 z-10">
+                                    <div className="aspect-video overflow-hidden bg-stone-800 relative border border-stone-200">
+                                        <img src="https://media.st.dl.pinyuncloud.com/steam/apps/1151340/ss_395212210330f2c2e542704398267794b3b72774.1920x1080.jpg" alt="Target Style" className="object-cover w-full h-full transform group-hover:scale-105 transition-transform duration-1000" />
+                                        <div className="absolute top-4 left-4">
+                                            <span className="bg-bronze-600 text-white px-3 py-1 text-xs font-bold tracking-widest uppercase shadow-md">Target: Immersive</span>
+                                        </div>
+                                    </div>
+                                    <div className="pt-6 pb-2 text-center">
+                                        <h3 className="text-2xl font-serif font-bold text-ink mb-2">风格化写实</h3>
+                                        <p className="text-stone-600 font-serif text-base">类《文明》俯视角 + 《荒野之息》的光影质感。宏大叙事与细腻情感的统一。</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Connection Arrow */}
+                        <div className="hidden md:block absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
+                            <div className="w-12 h-12 bg-white rounded-full border-2 border-bronze-300 flex items-center justify-center shadow-lg text-bronze-500">
+                                <Icons.ArrowRight className="w-6 h-6" />
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        };
+
+        const BusinessAndTeam = () => {
+            return (
+                <section id="business" className="py-24 bg-stone-100">
+                    <div className="container mx-auto px-6">
+                        <div className="grid md:grid-cols-2 gap-16">
+                            {/* Business Model */}
+                            <div>
+                                <h2 className="text-4xl md:text-5xl font-serif font-bold text-ink mb-10 flex items-center gap-4">
+                                    <Icons.Coins className="text-bronze-600 w-10 h-10" /> 商业化模式
+                                </h2>
+                                <div className="space-y-8 font-serif">
+                                    <div className="bg-white p-8 border-l-4 border-bronze-600 shadow-sm">
+                                        <h4 className="font-bold text-2xl text-stone-800 mb-3">基础门槛：买断制</h4>
+                                        <p className="text-lg text-stone-600 leading-relaxed">覆盖研发成本及端侧 SLM 授权。包含完整单人/多人模式及基础云算力配额。</p>
+                                    </div>
+                                    <div className="bg-white p-8 border-l-4 border-bronze-500 shadow-sm">
+                                        <h4 className="font-bold text-2xl text-stone-800 mb-3">模因扩展包</h4>
+                                        <p className="text-lg text-stone-600 leading-relaxed">注入“文明灵魂”的完整参数集。 包含独特的 AI 思考回路（如儒家礼乐或骑士精神）、传奇英雄智能体(韩信、苏格拉底)以及建筑、物件等全套美术风格。让你的废土聚落，瞬间拥有厚重的历史底蕴与独特的文化内核。</p>
+                                    </div>
+                                    <div className="bg-white p-8 border-l-4 border-stone-500 shadow-sm">
+                                        <h4 className="font-bold text-2xl text-stone-800 mb-3">长期战略：端云混合算力</h4>
+                                        <p className="text-lg text-stone-600 leading-relaxed">Logos 逻辑校验下放至本地 NPU，实现“零边际成本”运营，避免 Success Tax。</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Recruitment */}
+                            <div>
+                                <h2 className="text-4xl md:text-5xl font-serif font-bold text-ink mb-10 flex items-center gap-4">
+                                    <Icons.Tent className="text-bronze-600 w-10 h-10" /> 招募：AI原生团队
+                                </h2>
+                                <p className="text-stone-600 mb-8 italic font-serif text-xl">"1 策划 + 2 程序 + 2 美术。每个人都是指挥官。"</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                    {[
+                                        { role: "游戏设计师", name: "cooperzheng", desc: "整体设计，Prompt 调优" },
+                                        { role: "AI工程师", name: "Open", desc: "构建大脑 (LLM Workflow / RAG)" },
+                                        { role: "Gameplay工程师", name: "Open", desc: "构建世界 (Unity/PCG)" },
+                                        { role: "技术美术", name: "Open", desc: "构建管线 (AIGC Pipeline)" },
+                                        { role: "美术风格与交互设计", name: "Open", desc: "构建外观 (审美把控)" },
+                                        { role: "AI探索者", name: "Anyone", desc: "任何有激情的玩家" },
+                                    ].map((job, i) => (
+                                        <div key={i} className="bg-stone-200/50 p-6 border border-stone-300 hover:border-bronze-500 transition-colors">
+                                            <h4 className="font-bold text-stone-800 text-lg font-serif mb-2">{job.role}</h4>
+                                            <span className={`text-sm uppercase tracking-wide block mb-2 ${job.name === 'Open' ? 'text-green-700 font-bold' : 'text-stone-500'}`}>{job.name}</span>
+                                            <p className="text-sm text-stone-500 font-serif leading-relaxed">{job.desc}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        };
+
+        const Footer = () => {
+            return (
+                <footer className="bg-stone-900 text-stone-400 py-16 border-t-4 border-bronze-800">
+                    <div className="container mx-auto px-6">
+                        <div className="flex flex-col md:flex-row justify-between items-start gap-12">
+                            <div className="max-w-sm">
+                                <div className="flex items-center gap-3 mb-6">
+                                    <Logo size="lg" />
+                                    <div className="flex flex-col">
+                                        <span className="text-stone-200 font-serif font-bold tracking-wider text-2xl">Hum<span className="text-bronze-600">AI</span>nity</span>
+                                        <span className="text-[10px] uppercase tracking-widest text-stone-600">Project Genesis</span>
+                                    </div>
+                                </div>
+                                <p className="text-stone-500 text-sm leading-relaxed mb-6 font-serif">
+                                    打破“预制内容”的桎梏，创造真正的涌现式文明体验。这是献给所有理想主义者的数字方舟。
+                                </p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-12 text-sm font-sans">
+                                <div>
+                                    <h4 className="text-stone-200 font-bold mb-4 uppercase tracking-wider text-xs">Explore</h4>
+                                    <ul className="space-y-2">
+                                        <li><a href="#" className="hover:text-bronze-500 transition-colors">白皮书</a></li>
+                                        <li><a href="#" className="hover:text-bronze-500 transition-colors">开发日志</a></li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <h4 className="text-stone-200 font-bold mb-4 uppercase tracking-wider text-xs">Connect</h4>
+                                    <ul className="space-y-2">
+                                        <li><a href="#" className="hover:text-bronze-500 transition-colors">Discord</a></li>
+                                        <li><a href="#" className="hover:text-bronze-500 transition-colors">Email Us</a></li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="mt-16 pt-8 border-t border-stone-800 text-center text-xs text-stone-600 font-serif">
+                            &copy; 2025 HumAInity Project.
+                        </div>
+                    </div>
+                </footer>
+            );
+        };
+
+        const App = () => {
+            return (
+                <div className="min-h-screen bg-paper">
+                    <Navbar />
+                    <Hero />
+                    <FeaturesSection />
+                    <ComparisonSection />
+                    <CoreLoop />
+                    <DualCoreSystem />
+                    <Roadmap />
+                    <ArtStyleSection />
+                    <BusinessAndTeam />
+                    <Footer />
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
