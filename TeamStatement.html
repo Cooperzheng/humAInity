@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team Manifesto - HumAInity</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://cdn.bootcdn.net/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+    <script crossorigin src="https://cdn.bootcdn.net/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://cdn.bootcdn.net/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    
+    <script>
+        if (typeof tailwind !== 'undefined') {
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        colors: {
+                            paper: '#F2EEE5', 
+                            ink: '#2B2B2B',
+                            stone: { 50: '#fafaf9', 100: '#f5f5f4', 850: '#1C1917' },
+                            bronze: { 500: '#B08D55', 700: '#8C6B3D', 900: '#5C4033' },
+                            terracotta: '#A0522D',
+                        },
+                        fontFamily: {
+                            serif: ['"Noto Serif SC"', '"Songti SC"', 'SimSun', 'serif'],
+                            sans: ['"Noto Sans SC"', 'sans-serif'],
+                        }
+                    }
+                }
+            };
+        }
+    </script>
+
+    <style>
+        body { font-family: 'Noto Serif SC', serif; color: #2B2B2B; background-color: #F2EEE5; }
+        
+        /* 纹理叠加 */
+        .texture-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-image: url('https://www.transparenttextures.com/patterns/natural-paper.png');
+            opacity: 0.4; pointer-events: none; z-index: 50; mix-blend-mode: multiply;
+        }
+
+        /* 动画 */
+        @keyframes slowFloat {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-6px); }
+        }
+        .animate-float { animation: slowFloat 6s ease-in-out infinite; }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in { animation: fadeIn 1s ease-out forwards; }
+        
+        .section-divider {
+            height: 1px;
+            background: linear-gradient(to right, transparent, #B08D55, transparent);
+            margin: 4rem auto;
+            width: 60%;
+            opacity: 0.3;
+        }
+
+        h2.section-title {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 3rem;
+        }
+        h2.section-title::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 40px;
+            height: 2px;
+            background-color: #8C6B3D;
+        }
+    </style>
+</head>
+<body class="antialiased relative">
+    
+    <div class="texture-overlay"></div>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- Icons ---
+        const Icons = {
+            User: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+            Target: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>,
+            Quote: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/></svg>,
+            Check: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><polyline points="20 6 9 17 4 12"/></svg>,
+            MapPin: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>,
+        };
+
+        // --- Components ---
+        
+        const SectionHeader = ({ title }) => (
+            <div className="text-center w-full">
+                <h2 className="text-3xl md:text-4xl font-serif font-bold text-ink section-title">{title}</h2>
+            </div>
+        );
+
+        // 1. 团队成员介绍
+        const TeamSection = () => {
+            return (
+                <section className="py-20 bg-stone-100 border-b border-stone-200">
+                    <div className="container mx-auto px-6 max-w-5xl">
+                        <SectionHeader title="团队成员介绍" />
+                        <div className="grid md:grid-cols-2 gap-8 mt-12">
+                            {/* Member C */}
+                            <div className="bg-paper p-8 border border-stone-300 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-bronze-700"></div>
+                                <div className="flex items-center gap-4 mb-6">
+                                    <div className="w-12 h-12 bg-ink text-paper flex items-center justify-center rounded-sm font-bold text-xl font-serif">C</div>
+                                    <div>
+                                        <h3 className="text-2xl font-bold font-serif text-ink">发起者-C</h3>
+                                    </div>
+                                </div>
+                                <div className="space-y-4 text-stone-700 font-serif leading-relaxed">
+                                    <p><strong className="text-ink">本职工作：</strong>策划</p>
+                                    <p>有丰富的玩法体验设计、UE引擎使用经验。</p>
+                                    <p>对AI+游戏的未来有很高的热情和期许。</p>
+                                </div>
+                            </div>
+
+                            {/* Member F */}
+                            <div className="bg-paper p-8 border border-stone-300 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-stone-500"></div>
+                                <div className="flex items-center gap-4 mb-6">
+                                    <div className="w-12 h-12 bg-stone-200 text-stone-600 flex items-center justify-center rounded-sm font-bold text-xl font-serif">F</div>
+                                    <div>
+                                        <h3 className="text-2xl font-bold font-serif text-ink">当前成员-F</h3>
+                                    </div>
+                                </div>
+                                <div className="space-y-4 text-stone-700 font-serif leading-relaxed">
+                                    <p><strong className="text-ink">本职工作：</strong>TA</p>
+                                    <p>对PCG生成有丰富的落地经验。</p>
+                                    <p>充满好奇心，想要探索未知的边界。</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        };
+
+        // 2. 项目发起原因
+        const MotivationSection = () => {
+            return (
+                <section className="py-20 bg-paper">
+                    <div className="container mx-auto px-6 max-w-5xl">
+                        <SectionHeader title="项目发起原因" />
+                        
+                        <div className="space-y-16 mt-12">
+                            {/* 2.1 生产力解放 */}
+                            <div className="border-l-4 border-bronze-500/30 pl-8">
+                                <h3 className="text-2xl font-bold text-ink mb-4 font-serif flex items-center gap-3">
+                                    <span className="text-bronze-700">#</span> AI带来生产力解放
+                                </h3>
+                                <p className="text-lg text-stone-700 leading-loose font-serif">
+                                    发起者个人每个月在AI上的花费大概是500-600刀，深刻感受到了生成式AI在美术资产、代码编写等领域的巨大助力。
+                                    <br/>
+                                    <span className="text-ink font-bold block mt-4 text-xl">“我认为这让小团队可以拥有更大的野心，做出更高品质、体验的独立产品。”</span>
+                                </p>
+                            </div>
+
+                            <div className="section-divider"></div>
+
+                            {/* 2.2 游戏体验想象空间 */}
+                            <div>
+                                <h3 className="text-2xl font-bold text-ink mb-6 font-serif flex items-center gap-3">
+                                    <span className="text-bronze-700">#</span> AI带来游戏体验的想象空间
+                                </h3>
+                                <p className="text-stone-700 mb-6 font-serif text-lg">除了在研发阶段的助力之外，生成式AI被很多人认为，能够带来游戏体验的变革、创新。</p>
+                                
+                                <div className="bg-stone-100 p-8 border border-stone-200 mb-6">
+                                    <p className="text-stone-500 text-sm mb-4 font-bold tracking-widest uppercase">我个人总结的几个方向</p>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                                        {['无限故事讲述', '终极AI队友', '虚拟世界生成', '鲜活社会模拟'].map((item, i) => (
+                                            <div key={i} className="bg-paper py-3 px-2 border border-stone-300 font-bold text-ink shadow-sm">{item}</div>
+                                        ))}
+                                    </div>
+                                </div>
+                                
+                                <div className="space-y-4 text-stone-600 font-serif text-sm bg-[#EBE6DB] p-6 rounded-sm">
+                                    <p>• <strong className="text-ink">米哈游</strong>等内容型游戏厂商，已经在“无限故事讲述”上进行了探索，例如星布谷地的聊天NPC、whisper from the star。</p>
+                                    <p>• <strong className="text-ink">腾讯、蓝洞、育碧</strong>等有射击竞技产品的，也在进行终极AI队友的探索。例如和平的吉莉、育碧的teammates。</p>
+                                </div>
+                            </div>
+
+                            <div className="section-divider"></div>
+
+                            {/* 2.3 我有自己想做的体验 */}
+                            <div>
+                                <h3 className="text-2xl font-bold text-ink mb-6 font-serif flex items-center gap-3">
+                                    <span className="text-bronze-700">#</span> 我有自己想做的体验
+                                </h3>
+                                <p className="text-lg text-stone-700 leading-relaxed font-serif mb-8">
+                                    我认为现在很多的AI产品，仅仅是把AI作为一个“智能聊天机器人”来使用，这不是我想玩到的体验。
+                                </p>
+
+                                <div className="grid md:grid-cols-2 gap-8 mb-10">
+                                    <div className="bg-white p-6 border-t-4 border-bronze-700 shadow-md">
+                                        <h4 className="text-xl font-bold text-ink mb-3 font-serif">智能体的觉醒</h4>
+                                        <p className="text-stone-600 leading-relaxed font-serif text-sm">
+                                            现在的 AI 智能体已具备长期记忆与复杂推理能力，它们不仅仅是合格的背景板NPC，能够和你进行随机而符合世界观的聊天；现在的智能体，完全有能力作为核心体验的提供者与参与者，与玩家共同推动游戏进程，产出体验。
+                                        </p>
+                                    </div>
+                                    <div className="bg-white p-6 border-t-4 border-stone-700 shadow-md">
+                                        <h4 className="text-xl font-bold text-ink mb-3 font-serif">交互深度的质变</h4>
+                                        <p className="text-stone-600 leading-relaxed font-serif text-sm">
+                                            玩家不再满足于按键交互，而是渴望像现实中的管理者一样，通过<strong className="text-ink">自然语言</strong>来驱动复杂的社会分工。现在的技术终于能让这种“动口不动手”的体验变得精准且富有游戏性。
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="bg-ink text-paper p-8 relative overflow-hidden">
+                                    <div className="absolute top-0 left-0 p-4 opacity-10"><Icons.Quote size={40} /></div>
+                                    <p className="text-xl font-serif italic text-center relative z-10 leading-relaxed">
+                                        “我想做的是什么呢？——我想把管理者们的体验搬到游戏中。<br/><br/>
+                                        <span className="text-bronze-500 not-italic text-base">
+                                            玩家作为一个文明聚落的领袖，通过自然语言，驱动不同性格、能力的智能体，来进行聚落的生产、建造、科技研发、领地扩张，体会'愿景驱动'的掌控感。
+                                        </span>”
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        };
+
+        // 3. 项目落地规划
+        const PlanSection = () => {
+            return (
+                <section className="py-20 bg-stone-100 border-t border-stone-200">
+                    <div className="container mx-auto px-6 max-w-5xl">
+                        <SectionHeader title="项目落地规划" />
+
+                        {/* 3.1 研发落地性 */}
+                        <div className="mt-12 mb-16">
+                            <h3 className="text-xl font-bold text-stone-500 mb-6 uppercase tracking-widest font-serif border-b border-stone-300 pb-2">研发落地性</h3>
+                            <p className="text-stone-600 mb-6 font-serif">作为一个创新体验的产品，我依然认为项目有较高的落地性。</p>
+                            
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <div className="bg-paper p-6 border border-stone-300 flex gap-4 items-start">
+                                    <div className="mt-1 text-bronze-700"><Icons.Check size={20} /></div>
+                                    <div>
+                                        <h4 className="font-bold text-ink text-lg font-serif mb-2">AI生成资产</h4>
+                                        <p className="text-stone-600 text-sm leading-relaxed font-serif">
+                                            选择合适的视角、美术风格，并用AI生成全部的美术资产+部分代码资产，让一个小团队也可以完成“堆量”的工作。
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="bg-paper p-6 border border-stone-300 flex gap-4 items-start">
+                                    <div className="mt-1 text-bronze-700"><Icons.Check size={20} /></div>
+                                    <div>
+                                        <h4 className="font-bold text-ink text-lg font-serif mb-2">本地AI模型调教</h4>
+                                        <p className="text-stone-600 text-sm leading-relaxed font-serif">
+                                            对于自然语言驱动的智能体涌现行为，团队成员已经有了初步的思考。我们会基于QWen的基座模型，训练4B/7B量级的蒸馏模型，运行在玩家电脑中，带来低延迟、低成本的智能体交互体验。
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 3.2 研发里程碑 */}
+                        <div>
+                            <h3 className="text-xl font-bold text-stone-500 mb-8 uppercase tracking-widest font-serif border-b border-stone-300 pb-2">研发里程碑</h3>
+                            <div className="space-y-8 relative pl-6 md:pl-0">
+                                <div className="absolute left-6 md:left-1/2 top-0 bottom-0 w-px bg-stone-300 md:-translate-x-1/2 hidden md:block"></div>
+
+                                {/* MVP */}
+                                <div className="relative flex flex-col md:flex-row items-center justify-between group">
+                                    <div className="md:w-[45%] bg-white p-6 border border-stone-200 shadow-sm relative z-10 hover:border-bronze-500 transition-colors">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <h4 className="text-xl font-bold text-ink font-serif">MVP原型</h4>
+                                            <span className="text-xs bg-stone-100 px-2 py-1 text-stone-500 font-bold">3 Months</span>
+                                        </div>
+                                        <p className="text-stone-600 text-sm leading-relaxed font-serif">
+                                            <strong className="text-bronze-700">核心产出：</strong> 一个预制的黄河流域小型部落场景，包含 10-20 名具备基础性格与记忆的智能体。
+                                        </p>
+                                    </div>
+                                    <div className="absolute left-1/2 -translate-x-1/2 w-4 h-4 bg-bronze-500 rounded-full border-4 border-stone-100 hidden md:block"></div>
+                                    <div className="md:w-[45%]"></div>
+                                </div>
+
+                                {/* 垂切 */}
+                                <div className="relative flex flex-col md:flex-row items-center justify-between group">
+                                    <div className="md:w-[45%]"></div>
+                                    <div className="absolute left-1/2 -translate-x-1/2 w-4 h-4 bg-stone-400 rounded-full border-4 border-stone-100 hidden md:block group-hover:bg-bronze-500 transition-colors"></div>
+                                    <div className="md:w-[45%] bg-white p-6 border border-stone-200 shadow-sm relative z-10 hover:border-bronze-500 transition-colors">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <h4 className="text-xl font-bold text-ink font-serif">垂切版本</h4>
+                                            <span className="text-xs bg-stone-100 px-2 py-1 text-stone-500 font-bold">3 Months</span>
+                                        </div>
+                                        <p className="text-stone-600 text-sm leading-relaxed font-serif">
+                                            <strong className="text-bronze-700">核心产出：</strong> 锁定公元前 200 年（铁器时代成熟期）的完整游戏切片。智能体规模提升至 30+，出现明确的职业分工（铁匠、农夫、士兵）与社会层级。
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* EA */}
+                                <div className="relative flex flex-col md:flex-row items-center justify-between group">
+                                    <div className="md:w-[45%] bg-white p-6 border border-stone-200 shadow-sm relative z-10 hover:border-bronze-500 transition-colors">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <h4 className="text-xl font-bold text-ink font-serif">EA版本</h4>
+                                            <span className="text-xs bg-stone-100 px-2 py-1 text-stone-500 font-bold">6 Months</span>
+                                        </div>
+                                        <p className="text-stone-600 text-sm leading-relaxed font-serif">
+                                            <strong className="text-bronze-700">核心产出：</strong> 面向 Steam 发售的单人体验版。开放 1-2 个时代的跨度演化，引入基于 PCG 生成的区域性大地图。美术风格定调为<strong className="text-ink">俯视角·风格化写实</strong>。
+                                        </p>
+                                    </div>
+                                    <div className="absolute left-1/2 -translate-x-1/2 w-4 h-4 bg-stone-400 rounded-full border-4 border-stone-100 hidden md:block group-hover:bg-bronze-500 transition-colors"></div>
+                                    <div className="md:w-[45%]"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        };
+
+        // 4. 目前团队缺口
+        const GapSection = () => {
+            return (
+                <section className="py-20 bg-[#EBE6DB] border-t border-stone-300">
+                    <div className="container mx-auto px-6 max-w-5xl">
+                        <SectionHeader title="目前团队缺口" />
+                        
+                        <div className="mt-12">
+                            <h3 className="text-center text-stone-500 font-serif mb-8 text-lg">
+                                理想情况下，我们还需要 <span className="text-bronze-700 font-bold text-2xl mx-1">3</span> 名成员
+                            </h3>
+                            
+                            <div className="grid md:grid-cols-3 gap-6">
+                                {[
+                                    {
+                                        title: "AI Core Engineer",
+                                        desc: "构建大脑，负责 LLM Workflow 与记忆工程。"
+                                    },
+                                    {
+                                        title: "Gameplay Engineer",
+                                        desc: "构建世界，负责 Unity 物理交互与 PCG 算法。"
+                                    },
+                                    {
+                                        title: "Art Style Lead",
+                                        desc: "构建外观，负责审美把控与 UI 交互。"
+                                    }
+                                ].map((role, i) => (
+                                    <div key={i} className="bg-paper p-6 border-t-4 border-stone-400 hover:border-bronze-600 shadow-md transition-all group">
+                                        <div className="mb-4 text-stone-300 group-hover:text-bronze-600 transition-colors">
+                                            <Icons.User size={32} />
+                                        </div>
+                                        <h4 className="text-xl font-bold text-ink font-serif mb-3">{role.title}</h4>
+                                        <p className="text-stone-600 font-serif text-sm leading-relaxed">
+                                            {role.desc}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            );
+        };
+
+        const Footer = () => (
+            <footer className="bg-ink text-stone-500 py-12 text-center text-xs font-serif border-t-4 border-bronze-900">
+                <div className="mb-4 font-bold text-xl text-stone-400">Hum<span className="text-bronze-600">AI</span>nity</div>
+                <p>&copy; 2025 HumAInity Project.</p>
+            </footer>
+        );
+
+        // --- Main App ---
+        const App = () => {
+            return (
+                <div className="min-h-screen">
+                    {/* Simple Hero/Header */}
+                    <div className="py-24 text-center border-b border-stone-300 bg-paper relative overflow-hidden">
+                        <div className="absolute inset-0 opacity-10 pointer-events-none" style={{backgroundImage: 'radial-gradient(#B08D55 1px, transparent 1px)', backgroundSize: '30px 30px'}}></div>
+                        <h1 className="text-5xl md:text-6xl font-black font-serif text-ink tracking-tight relative z-10">团队陈述</h1>
+                        <p className="mt-4 text-stone-500 font-serif italic tracking-widest uppercase">Team Manifesto</p>
+                    </div>
+
+                    <TeamSection />
+                    <MotivationSection />
+                    <PlanSection />
+                    <GapSection />
+                    <Footer />
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
