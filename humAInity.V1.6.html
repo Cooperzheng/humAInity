@@ -5,15 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HumAInity - 文明重燃 V1.6</title>
     
-    <!-- 1. 引入 Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- 2. 引入 React 和 ReactDOM -->
+    <!-- 1. 引入 React 和 ReactDOM (优先加载) -->
     <script crossorigin src="https://cdn.bootcdn.net/ajax/libs/react/18.2.0/umd/react.development.js"></script>
     <script crossorigin src="https://cdn.bootcdn.net/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
     
-    <!-- 3. 引入 Babel -->
+    <!-- 2. 引入 Babel (需要立即编译JSX) -->
     <script src="https://cdn.bootcdn.net/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    
+    <!-- 3. 引入 Tailwind CSS (可以延迟) -->
+    <script src="https://cdn.tailwindcss.com" defer></script>
     
     <script>
         // 配置 Tailwind 主题 - 保持深沉的“墨与铜”配色
@@ -105,13 +105,23 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        setTimeout(() => {
+        // 等待所有资源加载完成
+        function hideLoader() {
             const loader = document.getElementById('loading-screen');
-            if(loader) {
+            if(loader && typeof React !== 'undefined' && typeof ReactDOM !== 'undefined' && typeof Babel !== 'undefined') {
                 loader.style.opacity = '0';
                 setTimeout(() => loader.remove(), 500);
+            } else {
+                setTimeout(hideLoader, 100);
             }
-        }, 800);
+        }
+        
+        // 页面加载完成后开始检查
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => setTimeout(hideLoader, 100));
+        } else {
+            setTimeout(hideLoader, 100);
+        }
 
         // --- SVG Icons ---
         const Icons = {

@@ -5,15 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Team Manifesto - HumAInity</title>
     
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- React & ReactDOM -->
+    <!-- React & ReactDOM (优先加载) -->
     <script crossorigin src="https://cdn.bootcdn.net/ajax/libs/react/18.2.0/umd/react.development.js"></script>
     <script crossorigin src="https://cdn.bootcdn.net/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
     
-    <!-- Babel -->
+    <!-- Babel (需要立即编译JSX) -->
     <script src="https://cdn.bootcdn.net/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    
+    <!-- Tailwind CSS (可以延迟) -->
+    <script src="https://cdn.tailwindcss.com" defer></script>
     
     <script>
         if (typeof tailwind !== 'undefined') {
@@ -39,6 +39,18 @@
 
     <style>
         body { font-family: 'Noto Serif SC', serif; color: #2B2B2B; background-color: #F2EEE5; }
+        
+        /* 加载遮罩 */
+        #loading-screen {
+            position: fixed; inset: 0; background: #F2EEE5; z-index: 10000;
+            display: flex; justify-content: center; align-items: center; flex-direction: column;
+            color: #2B2B2B; transition: opacity 0.5s;
+        }
+        .spinner {
+            width: 40px; height: 40px; border: 3px solid #B08D55; border-top-color: transparent;
+            border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
         
         /* 纹理叠加 */
         .texture-overlay {
@@ -88,6 +100,14 @@
 <body class="antialiased relative">
     
     <div class="texture-overlay"></div>
+    
+    <!-- 加载遮罩 -->
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <div class="text-2xl font-serif font-bold mb-2 tracking-widest">HumAInity</div>
+        <div class="text-sm opacity-70 italic">正在加载团队陈述...</div>
+    </div>
+    
     <div id="root"></div>
 
     <script type="text/babel">
@@ -402,8 +422,31 @@
             );
         };
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        // 等待所有资源加载完成后再渲染
+        function initApp() {
+            if (typeof React !== 'undefined' && typeof ReactDOM !== 'undefined' && typeof Babel !== 'undefined') {
+                const root = ReactDOM.createRoot(document.getElementById('root'));
+                root.render(<App />);
+                
+                // 隐藏加载遮罩
+                setTimeout(() => {
+                    const loader = document.getElementById('loading-screen');
+                    if(loader) {
+                        loader.style.opacity = '0';
+                        setTimeout(() => loader.remove(), 500);
+                    }
+                }, 300);
+            } else {
+                setTimeout(initApp, 100);
+            }
+        }
+        
+        // 页面加载完成后开始检查
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initApp);
+        } else {
+            initApp();
+        }
     </script>
 </body>
 </html>
