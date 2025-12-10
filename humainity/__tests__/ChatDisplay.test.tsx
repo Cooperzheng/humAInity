@@ -66,7 +66,7 @@ describe('对话显示测试', () => {
     render(<GameUI leaderName="Archon" />);
 
     // 聚焦输入框
-    const input = screen.getByPlaceholderText(/喊话/);
+    const input = screen.getByPlaceholderText(/输入消息/);
     fireEvent.focus(input);
 
     // 验证状态变化
@@ -117,7 +117,7 @@ describe('对话显示测试', () => {
 
     render(<GameUI leaderName="Archon" />);
 
-    const input = screen.getByPlaceholderText(/正在与德米特里交谈/);
+    const input = screen.getByPlaceholderText(/与德米特里交谈/);
     const sendButton = screen.getByText('发送');
 
     // 输入消息
@@ -199,7 +199,7 @@ describe('对话显示测试', () => {
 
     render(<GameUI leaderName="Archon" />);
 
-    const input = screen.getByPlaceholderText(/正在与德米特里交谈/);
+    const input = screen.getByPlaceholderText(/与德米特里交谈/);
 
     // 输入消息
     fireEvent.change(input, { target: { value: '测试消息' } });

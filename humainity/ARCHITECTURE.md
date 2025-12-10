@@ -7,34 +7,218 @@
 - **样式**：Tailwind CSS 4（`globals.css` 定义基础变量）
 - **测试**：Vitest + React Testing Library（`vitest` 脚本）
 
-## 目录结构与职责
-- `app/page.tsx`：入口页面。启动页收集领袖名称；进入 3D 场景后承载 `GameScene`。
+## 目录结构与职责（v0.2 重构后）
+- `app/page.tsx`：入口页面。启动页收集领袖名称；进入 3D 场景后承载 `GameScene`。v0.3.1 移除右下角的操作提示（拖拽旋转/滚轮缩放等）和左上角退出按钮，由左侧操作指引替代，UI 更加简洁。
 - `app/layout.tsx`：全局布局与字体加载。
 - `app/globals.css`：全局样式与主题变量。
 - `app/components/Game/`
   - `GameState.ts`：`zustand` 状态（资源、日志、交互状态、待处理指令）及操作函数。
-  - `GameScene.tsx`：3D 主场景（Canvas）；包含地形、水体、资源生成、玩家/智能体行为、近场检测与指令执行。
-  - `GameUI.tsx`：覆盖式 UI（资源面板、日志窗口、对话输入区），调用 `GameState` 读写状态和指令。
-- `app/components/World/ResourceTile.tsx`：资源单元（树/石头）模型与 hover 效果。
+  - `GameScene.tsx`：**3D 场景容器**（重构后约 170 行，精简 82%）。负责 Canvas 配置、相机、光照、资源初始化，组合各模块组件。不包含具体业务逻辑。
+  - `GameUI.tsx`：**覆盖式 UI（v0.3 四区域布局重构）**。包含资源面板（左上）、操作指引（左侧中间，智能隐藏）、日志窗口（右上）、对话输入区（底部居中，灵动岛设计）。调用 `GameState` 读写状态和指令。
+- `app/components/Character/`（v0.2 新增）
+  - `PlayerLeader.tsx`：玩家角色组件。依赖 `useWASDControls` Hook，实现 WASD 移动、手臂摆动动画、边界限制。
+  - `WorkerAgent.tsx`：NPC 智能体组件（德米特里）。实现状态机（IDLE/LISTENING/THINKING/ACTING/ASKING）、随机游走、砍树动画。
+- `app/components/World/`
+  - `Environment.tsx`（v0.2 新增）：环境组件（Ground、Mountain、Water），提供地形和水体渲染。
+  - `ResourceTile.tsx`：资源单元（树/石头）模型与 hover 效果、倒地动画。
+- `app/components/Icons/`
+  - `EarIcon.tsx`：耳朵图标（近场对话状态指示）。
+  - `MouseWheelIcon.tsx`：鼠标滚轮图标（v0.3.1 新增，操作指引用）。
+- `app/hooks/`（v0.2 新增）
+  - `useWASDControls.ts`：键盘控制 Hook，监听 WASD 按键，返回移动向量计算函数。
+  - `useGameLogic.ts`：**核心游戏逻辑 Hook**。封装近场检测、指令解析、砍树流程、资源管理等复杂业务逻辑，供 GameScene 调用。
 - `public/`：静态资源。
 
-## 核心运行流程
+## 核心运行流程（v0.2 模块化架构）
 1) **启动页**：用户输入文明代号并启动 -> 切换到 3D 场景。
-2) **场景渲染（`GameScene`）**：
-   - 创建等轴测相机、光照、地形/水体占位。
-   - 随机生成资源节点（树/石）。
-   - 挂载角色：
-     - `PlayerLeader`：WASD 控制（基于相机朝向），头顶名称标签，边界限定。
-     - `WorkerAgent`（德米特里）：状态机 `IDLE/LISTENING/THINKING/ACTING/ASKING`，近场自动聆听，执行“砍树”指令并更新木材、日志、资源删除。
-   - 近场检测：玩家与 NPC 距离 < 3 进入 LISTENING；远离回退 IDLE。
-   - 指令流：
-     - UI 将输入写入 `pendingCommand`。
-     - 场景 effect 监听：若近场且 LISTENING 且包含“砍树/伐木” -> 询问数量（ASKING）；解析数字后进入 ACTING。
-     - 执行砍树：移动到目标树，挥动并删除最近树 -> `addWood(+1)`，记录日志；队列耗尽后回到 LISTENING/IDLE。
-3) **UI 层（`GameUI`）**：
-   - 资源面板：显示木材。
-   - 日志：系统/聊天两类；可展开。
-   - 对话输入：近场时提示“正在与德米特里交谈...”；发送后将内容写入 `pendingCommand`，等待场景处理。
+
+2) **场景渲染（`GameScene` 容器）**：
+   - 初始化：创建 playerRef 和 agentRef 引用，生成 60 个随机资源节点（树/石）。
+   - 调用 `useGameLogic` Hook，传入 refs、resources、leaderName，获取 actionTarget 和 onActionDone 回调。
+   - 渲染层次：
+     - **相机与光照**：OrthographicCamera（等轴测视角）、ambientLight（环境光）、directionalLight（平行光 + 阴影）。
+     - **环境组件**：`<Ground />`, `<Mountain />` (4个), `<Water />` (2个)。
+     - **资源节点**：遍历 resources 数组，渲染 `<ResourceTile />`。
+     - **角色组件**：
+       - `<PlayerLeader />`: 接收 leaderName 和 playerRef。内部调用 `useWASDControls` 实现移动。
+       - `<WorkerAgent />`: 接收 agentRef、playerRef、agentState、isNearAgent、actionTarget、onActionDone。内部实现状态机和动画。
+     - **轨道控制**：`<OrbitControls />`（允许旋转、缩放、平移）。
+
+3) **游戏逻辑（`useGameLogic` Hook）**：
+   - **近场检测**（`useFrame`）：
+     - 每帧计算玩家与 NPC 距离，更新 `isNearAgent` 状态。
+     - 根据距离和当前状态自动切换 `agentState`（IDLE/LISTENING）。
+     - 使用 `lastNearRef` 和 `lastAgentStateRef` 避免频繁 setState。
+   - **指令处理**（`useEffect` 监听 `pendingCommand`）：
+     - 实时计算距离（不依赖可能过时的 isNearAgent）。
+     - 识别"砍树/伐木"指令 -> 进入 ASKING 状态，询问数量。
+     - 不支持的指令 -> NPC 回复"暂时只会砍树"。
+   - **数量解析**（`useEffect` 监听 `waitingQuantityRef`）：
+     - 正则解析数字（`/\d+/`），寻找最近树木，设置 `actionTarget`。
+     - 进入 ACTING 状态，德米特里移动并砍树。
+     - 随机延迟机制（`getRandomDelay`）模拟真实对话节奏。
+   - **砍树完成**（`onActionDone` 回调）：
+     - 标记树木为 `falling` 状态，2秒后删除。
+     - 更新木材资源（`addWood(+1)`），记录系统日志。
+     - 队列未空：寻找下一棵树，继续 ACTING。
+     - 队列清空：检测实时距离，返回 LISTENING 或 IDLE。
+
+4) **UI 层（`GameUI`）- 四区域布局设计（v0.3 重构）**：
+   
+   **左上角（HUD - 资源面板）**：
+   - 显示木材和食物资源（food 仅 UI 展示）。
+   - 紧凑设计（`px-3 py-2`），石材/木纹风格，不遮挡 3D 场景。
+   
+   **左侧中间（操作指引面板）**：
+   - 智能显示/隐藏：仅在 `inputFocused` 为 `false` 时显示。
+   - 参考 3A 游戏 UI（如艾尔登法环），竖向排列按键提示：
+     - `[W][A][S][D]` 移动
+     - `[Enter]` 交谈
+     - `滚轮` 缩放视角
+   - 半透明背景（`bg-black/50`）+ 模糊效果（`backdrop-blur-sm`），融入场景。
+   
+   **右上角（系统日志窗口）**：
+   - 位置：`top-12 right-4`（下移预留空间给未来系统菜单）。
+   - 系统消息（`systemLogs`），支持展开/收起双态设计。
+   - 展开时显示所有日志，收起时显示最近 3 条。
+   
+   **底部居中（对话面板 - 灵动岛设计）**：
+   - **宽度优化**：从 `w-[720px]` 缩减为 `max-w-2xl`（约 672px），减少遮挡。
+   - **灵动岛状态指示器**（左侧方形区域 `w-12 h-12`）：
+     - 默认状态：灰色气泡 💬 + 灰色背景（`bg-stone-600/50`）
+     - 近场状态（`isNearAgent && (agentState === 'LISTENING' || 'ASKING')`）：
+       - 显示金色耳朵图标 `<EarIcon />` + 呼吸动画（`animate-pulse`）
+       - 背景色切换为琥珀色（`bg-amber-500/30`）
+     - 过渡效果：`transition-all duration-300`
+   - **对话历史区**：
+     - 聚焦时显示所有对话（`max-h-60`），失焦时显示最近 3 条（`max-h-28`）。
+     - 5 秒自动隐藏机制：失焦后启动倒计时，有新消息时重新显示并重置计时器。
+   - **动态占位符**：
+     - 近场（`isNearAgent`）：显示"与德米特里交谈..."
+     - 远场：显示"输入消息..."
+     - 简洁明了，移除冗长的原提示文字。
+   - **输入框结构**：`[状态指示器] [输入框] [发送按钮]`
+
+5) **数据流总结**：
+   ```
+   用户输入 → GameUI.handleSend
+     ↓
+   setPendingCommand(text) → GameState
+     ↓
+   useGameLogic 监听 → 解析指令
+     ↓
+   setAgentState(ASKING/ACTING) → WorkerAgent 响应
+     ↓
+   onActionDone → 更新资源 → setResources
+     ↓
+   addWood(+1) → GameState → GameUI 显示
+   ```
+
+## UI 布局与交互设计（v0.3 灵动岛重构）
+
+### 四区域布局总览
+GameUI 采用四区域分布式布局，最大化减少对 3D 场景中心的遮挡：
+
+```
+┌─────────────────────────────────────────┐
+│ [资源面板]              [文明记录窗口]  │ ← 顶部
+│     (HUD)                (System Log)   │
+│                                         │
+│ [操作指引]                              │ ← 中部左侧
+│  (智能隐藏)            3D 场景区域       │
+│                       (无遮挡中心)       │
+│                                         │
+│           [灵动岛对话框]                │ ← 底部居中
+└─────────────────────────────────────────┘
+```
+
+### 1. 左上角资源面板（HUD）
+- **定位**：`top-4 left-4`
+- **内容**：木材、食物资源数量
+- **设计**：
+  - 紧凑样式（`px-3 py-2`）
+  - 石材/木纹风格（`bg-stone-300`, `border-stone-800`）
+  - 固定宽度，不随窗口变化
+
+### 2. 左侧中间操作指引（Controls - v0.3.1 淡化优化）
+- **定位**：`top-1/2 left-4 -translate-y-1/2`（垂直居中）
+- **内容**：
+  - `[W][A][S][D]` 移动
+  - `[Enter]` 交谈
+  - 鼠标滚轮图标 缩放视角（使用 `<MouseWheelIcon />` 替代文字）
+- **智能隐藏逻辑**：
+  - 条件：`!inputFocused`（仅在输入框失焦时显示）
+  - 动画：`transition-opacity duration-300`
+  - 指针事件：`pointer-events-none`（不阻挡鼠标交互）
+- **设计风格（低存在感）**：
+  - 极淡背景：`bg-black/20`（从 v0.3 的 `bg-black/50` 优化）
+  - 移除模糊效果和阴影，减少视觉干扰
+  - 按键样式淡化：`bg-stone-800/40 border-stone-600/30`（半透明）
+  - 文字颜色：`text-stone-300 text-xs`
+  - 参考 3A 游戏 UI（如艾尔登法环），但更低调融入场景
+
+### 3. 右上角文明记录窗口（System Log）
+- **定位**：`top-12 right-4`（v0.3 从 `top-4` 下移）
+- **预留空间**：为未来的系统菜单/设置按钮预留顶部约 2rem 空间
+- **功能**：
+  - 双态设计：收起（显示最近 3 条）/ 展开（显示所有日志 + 滚动）
+  - 仅显示 `type === 'system'` 的日志
+  - 展开按钮：`toggleExpanded`
+
+### 4. 底部居中对话框（Dialogue - 灵动岛紧凑设计）
+- **定位**：`bottom-4 left-1/2 -translate-x-1/2`
+- **宽度优化**：`w-80`（约 320px，v0.3.1 紧凑版，从 v0.3 的 `max-w-2xl` 进一步缩减 2/3）
+- **响应式**：`max-w-[92vw]`（移动端不溢出）
+
+#### 灵动岛核心组件
+**结构**：`[状态指示器] [输入框] [发送按钮]`
+
+**状态指示器**（`w-12 h-12`，左侧方形区域）：
+- **默认状态**：
+  - 显示灰色气泡 💬
+  - 背景：`bg-stone-600/50`
+- **近场激活状态**（`isNearAgent && (agentState === 'LISTENING' || 'ASKING')`）：
+  - 显示金色耳朵图标 `<EarIcon size={24} />`
+  - 呼吸动画：`animate-pulse`
+  - 背景：`bg-amber-500/30`（琥珀色）
+  - 文字颜色：`text-amber-400`
+- **过渡效果**：`transition-all duration-300`
+
+**动态占位符逻辑**：
+```typescript
+const placeholder = isNearAgent ? '与德米特里交谈...' : '输入消息...';
+```
+- 近场：显示 NPC 名字提示
+- 远场：简洁的"输入消息..."
+- 移除冗长的"正在与德米特里交谈..."和"喊话（距离过远）..."
+
+**对话历史区**（位于输入框上方）：
+- **显示控制**：`showChatHistory` 状态
+- **自动隐藏机制**：
+  1. 输入框聚焦时：立即显示，`setShowChatHistory(true)`
+  2. 输入框失焦后：启动 5 秒倒计时，5 秒后隐藏
+  3. 有新消息时：重新显示并重置 5 秒计时器
+- **显示数量**：
+  - 聚焦时：显示所有对话（`chatLogs`），最大高度 `max-h-60`，可滚动
+  - 失焦时：显示最近 3 条（`chatLogs.slice(-3)`），最大高度 `max-h-28`
+- **日志类型**：仅显示 `type === 'chat'` 的消息
+
+### 交互状态同步
+**关键状态变量**：
+- `inputFocused`：输入框聚焦状态
+  - `true`：隐藏操作指引，启用 WASD 屏蔽，显示完整对话历史
+  - `false`：显示操作指引，恢复 WASD 控制，启动对话历史隐藏倒计时
+- `isNearAgent`：玩家与 NPC 距离判定（每帧检测）
+  - 影响状态指示器外观、动态占位符文字
+- `agentState`：NPC 状态机
+  - `LISTENING` / `ASKING`：近场时激活金色耳朵图标
+  - 其他状态：显示默认气泡
+
+### 动画与过渡效果
+- **呼吸动画**（耳朵图标）：`animate-pulse`（Tailwind 内置）
+- **状态指示器过渡**：`transition-all duration-300`（背景色、图标切换）
+- **操作指引淡入淡出**：`transition-opacity duration-300`
+- **模糊背景**：`backdrop-blur-sm`（操作指引区域）
 
 ## 状态与数据
 - `wood`：当前木材数量。
@@ -238,6 +422,12 @@ NPC 开始行动 → [ACTING 状态]
 - 使用 `currentColor` 继承父元素颜色
 - Props：`size`（默认24）、`className`
 - 用于近场对话时替代 emoji，提升游戏风格一致性
+
+**MouseWheelIcon**（`app/components/Icons/MouseWheelIcon.tsx` - v0.3.1 新增）
+- 鼠标滚轮图标（简洁的鼠标外框 + 中间滚轮线条）
+- 使用 `currentColor` 继承父元素颜色
+- Props：`size`（默认20）、`className`
+- 用于操作指引面板，替代"滚轮"文字，更直观
 
 **useToggle Hook**（定义在 `GameUI.tsx`）
 - 简化布尔状态切换逻辑
@@ -971,9 +1161,300 @@ if (dist > 0.15) {
 - ✅ 所有树的砍伐体验一致
 - ✅ 动画流畅自然
 
+## v0.2 架构重构说明（2025-12-10）
+
+### 重构目标
+解决 GameScene.tsx 代码臃肿问题（857 行），提升可维护性和扩展性，为未来多 NPC 协同功能做准备。
+
+### 重构前后对比
+
+**重构前（v0.1）**：
+- GameScene.tsx：857 行，混杂环境渲染、角色组件、输入控制、游戏逻辑
+- 单一文件职责不清晰，难以维护和测试
+
+**重构后（v0.2）**：
+- GameScene.tsx：约 170 行（减少 82%），仅作为容器组合各模块
+- Environment.tsx：62 行（Ground、Mountain、Water）
+- useWASDControls.ts：49 行（键盘控制逻辑）
+- PlayerLeader.tsx：145 行（玩家角色）
+- WorkerAgent.tsx：210 行（NPC 智能体）
+- useGameLogic.ts：约 280 行（游戏业务逻辑）
+
+### 模块划分原则
+
+1. **组件按职责分层**：
+   - World 层：环境和资源（Environment、ResourceTile）
+   - Character 层：角色实体（PlayerLeader、WorkerAgent）
+   - Game 层：场景容器和状态管理（GameScene、GameState、GameUI）
+
+2. **逻辑提取为 Hooks**：
+   - useWASDControls：纯输入控制，可复用于其他角色
+   - useGameLogic：封装复杂业务逻辑，减少 GameScene 负担
+
+3. **保持接口稳定**：
+   - Resource 类型定义移至 useGameLogic，导出供 GameScene 使用
+   - forwardRef 传递确保父组件可操作子组件的 THREE.Group 引用
+   - Props 设计清晰，依赖关系通过类型系统约束
+
+### 扩展性提升
+
+**多 NPC 支持（v0.3 规划）**：
+- 复用 WorkerAgent 组件，传入不同的 agentId 和 props
+- 扩展 useGameLogic 支持多 NPC 的指令分发：
+  ```typescript
+  const agents = [
+    { id: 'dmitri', ref: agentRef1, state: 'IDLE' },
+    { id: 'anna', ref: agentRef2, state: 'IDLE' }
+  ];
+  const { actionTargets, onActionDone } = useGameLogic({ agents, ... });
+  ```
+- GameState 扩展为数组管理多 NPC 状态
+
+**新角色类型**：
+- 基于 PlayerLeader/WorkerAgent 创建变体（如 Warrior、Builder）
+- 提取共同逻辑为基础 Hook（useCharacterMovement、useCharacterAnimation）
+
+**新任务类型**：
+- 在 useGameLogic 中添加新的指令解析分支（如"采矿"、"建造"）
+- 扩展 Resource 类型和 ResourceTile 组件支持新资源
+
+### 重构测试验证
+
+**测试策略**：
+- 重构不改变功能，所有现有测试应通过（40+ tests）
+- 现有测试文件无需修改（测试的是组件行为，不是内部实现）
+- 未来可为新模块添加单元测试：
+  - `useWASDControls.test.ts`：测试键盘事件处理
+  - `useGameLogic.test.ts`：测试指令解析和状态转换（需 mock useFrame）
+
+**已验证的功能点**：
+- ✅ WASD 移动控制（PlayerLeader + useWASDControls）
+- ✅ 近场检测和状态切换（useGameLogic + useFrame）
+- ✅ 砍树指令完整流程（指令解析、数量询问、执行、资源更新）
+- ✅ 输入焦点管理（GameScene 点击处理）
+- ✅ 对话历史显示和自动隐藏（GameUI）
+- ✅ NPC 随机游走和动画（WorkerAgent）
+- ✅ 环境渲染（Environment + ResourceTile）
+
+### 技术细节
+
+**useFrame 在 Hook 中的使用**：
+- useGameLogic 中的 `useFrame` 必须在 Canvas 内部调用
+- GameScene 调用 useGameLogic 时已在 `<GameSceneInner>` 组件中（Canvas 子组件）
+- 确保 Three.js 上下文可用
+
+**ref 传递链**：
+```
+GameScene (创建 playerRef/agentRef)
+  ↓
+useGameLogic (接收 refs，用于距离计算和位置获取)
+  ↓
+PlayerLeader/WorkerAgent (通过 forwardRef 暴露 THREE.Group)
+```
+
+**类型安全**：
+- Resource 类型在 useGameLogic 中定义并导出
+- ResourceType 从 ResourceTile 导入
+- AgentState 从 GameState 导入
+- 所有 Props 接口都显式定义，避免隐式 any
+
+## v0.3 配置分离重构说明（2025-12-10）
+
+### 重构目标
+消除代码中的硬编码数值（魔术数字），创建统一配置文件，实现数据驱动设计，提升游戏参数的可调性和可维护性。
+
+### 配置文件结构
+创建 `app/config/GameConfig.ts`，按功能模块组织配置：
+
+- **WORLD_CONFIG**: 世界与地图配置
+  - mapSize: 80 (米) - 地图大小
+  - mapBoundary: 38 (米) - 地图边界 (±38)
+  - groundThickness: 1 (米) - 地面厚度
+  - groundDepth: -0.5 (米) - 地面Y位置
+  - coreArea: 20 (米) - 核心区大小（资源生成范围）
+
+- **RESOURCE_CONFIG**: 资源生成与管理配置
+  - initialResourceCount: 60 - 初始资源数量
+  - treeSpawnProbability: 0.7 - 树的生成概率 (0-1)
+  - treeRemovalDelay: 2000 (毫秒) - 树木移除延迟
+  - treeFallRotationSpeed: 0.05 (弧度/帧) - 树木倒地旋转速度
+  - treeFallCompleteDelay: 500 (毫秒) - 倒地完成延迟
+  - woodPerTree: 1 - 每棵树产出木材
+
+- **MOVEMENT_CONFIG**: 角色移动配置
+  - playerSpeed: 0.05 (米/帧) - 玩家移动速度
+  - npcSpeed: 0.01 (米/帧) - NPC移动速度
+  - movementThreshold: 0.0001 - 移动判定阈值
+  - walkSwingSpeed: 4 - 行走摆动速度
+  - walkSwingAmplitude: 0.24 (弧度) - 行走摆动幅度
+
+- **INTERACTION_CONFIG**: 交互范围与阈值配置
+  - interactionRange: 3 (米) - 近场交互距离
+  - arrivalThreshold: 0.15 (米) - 到达目标的距离阈值
+  - idleArrivalThreshold: 0.1 (米) - 闲逛到达阈值
+  - stateCheckDelay: 100 (毫秒) - 状态检查延迟
+
+- **ACTION_CONFIG**: 动作参数配置
+  - chopSwingSpeed: 6 - 砍树挥动速度
+  - chopSwingAmplitude: 0.5 (弧度) - 砍树挥动幅度
+  - chopDuration: Math.PI * 8 - 砍树持续时间（约4秒）
+  - minChopQuantity: 1 - 最小砍树数量
+  - maxChopQuantity: 20 - 最大砍树数量
+
+- **NPC_CONFIG**: NPC 行为配置
+  - initialPosition: [2, 0, 2] - NPC初始位置 [x, y, z]
+  - wanderIntervalMin: 3 (秒) - 漫步间隔最小值
+  - wanderIntervalMax: 5 (秒) - 漫步间隔最大值
+  - wanderRangeHalf: 8 (米) - 漫步范围的一半 (±8)
+
+- **RESPONSE_DELAY_CONFIG**: NPC 响应延迟配置（模拟真实对话）
+  - default: { min: 800, max: 1500 } (毫秒) - 默认延迟
+  - tooFar: { min: 800, max: 1400 } - 距离过远提示延迟
+  - unsupportedCommand: { min: 1000, max: 1800 } - 不支持指令延迟
+  - askQuantity: { min: 800, max: 1400 } - 询问数量延迟
+  - clarify: { min: 1000, max: 2000 } - 要求澄清延迟
+  - confirm: { min: 800, max: 1400 } - 确认延迟
+  - actionStart: { min: 500, max: 800 } - 开始行动延迟
+
+- **CAMERA_CONFIG**: 相机配置
+  - position: [18, 22, 18] - 相机位置 [x, y, z]
+  - zoom: 14 - 缩放级别
+  - near: 0.1 (米) - 近裁剪面
+  - far: 200 (米) - 远裁剪面
+
+- **ENVIRONMENT_CONFIG**: 环境生成配置
+  - mountain: 山峰参数（peakCountMin/Max、heightMin/Max、radiusMin/Max 等）
+  - water: 水体尺寸配置
+
+### 类型安全
+所有配置对象使用 `as const` 断言，确保：
+- 配置值在运行时不可修改（TypeScript 级别的常量）
+- TypeScript 提供精确的类型推断
+- 数组和元组类型保持不变（如位置坐标 `[2, 0, 2]` 保持为元组类型）
+
+### 辅助函数
+```typescript
+// 生成随机延迟
+export function getRandomDelay(config: { min: number; max: number }): number {
+  return Math.floor(Math.random() * (config.max - config.min + 1)) + config.min;
+}
+
+// 生成随机漫步间隔
+export function getWanderInterval(): number {
+  return Math.random() * (NPC_CONFIG.wanderIntervalMax - NPC_CONFIG.wanderIntervalMin) + NPC_CONFIG.wanderIntervalMin;
+}
+```
+
+### 重构前后对比
+
+**重构前（硬编码）**：
+```typescript
+// useGameLogic.ts
+const near = dist < 3;  // 这个 3 是什么单位？为什么是 3？
+
+// PlayerLeader.tsx
+groupRef.current.position.x = Math.max(-38, Math.min(38, ...));  // 为什么是 38？
+
+// WorkerAgent.tsx
+const moveSpeedRef = useRef(0.01);  // 0.01 是多快？
+```
+
+**重构后（配置驱动）**：
+```typescript
+// GameConfig.ts
+export const INTERACTION_CONFIG = {
+  interactionRange: 3,  // 近场交互距离 (米)
+} as const;
+
+export const WORLD_CONFIG = {
+  mapBoundary: 38,  // 地图边界 (米, ±38)
+} as const;
+
+export const MOVEMENT_CONFIG = {
+  npcSpeed: 0.01,  // NPC移动速度 (米/帧)
+} as const;
+
+// 使用处
+const near = dist < INTERACTION_CONFIG.interactionRange;
+groupRef.current.position.x = Math.max(-WORLD_CONFIG.mapBoundary, ...);
+const moveSpeedRef = useRef(MOVEMENT_CONFIG.npcSpeed);
+```
+
+### 参数调整示例
+
+修改近场交互距离：
+```typescript
+// GameConfig.ts
+export const INTERACTION_CONFIG = {
+  interactionRange: 5,  // 从 3 改为 5，扩大交互范围
+  // ...
+} as const;
+```
+
+修改后，所有依赖此参数的功能自动生效：
+- 近场检测（useGameLogic）
+- NPC 状态切换（IDLE ↔ LISTENING）
+- UI 提示显示（"正在交谈" vs "距离过远"）
+
+### 维护优势
+
+- **集中管理**：所有游戏参数集中在一个文件，便于查找和修改
+- **文档化**：每个参数都有注释说明单位和含义
+- **平衡调整**：快速调整游戏参数进行测试和平衡
+- **类型安全**：TypeScript 确保配置使用的正确性
+- **可读性**：代码中使用语义化的配置名称替代魔术数字
+- **可扩展性**：便于未来添加难度级别、地图大小预设等功能
+
+### 扩展性提升
+
+**难度级别系统（未来扩展）**：
+```typescript
+export const DIFFICULTY_PRESETS = {
+  easy: {
+    playerSpeed: 0.07,
+    npcSpeed: 0.008,
+    interactionRange: 5,
+  },
+  normal: {
+    playerSpeed: 0.05,
+    npcSpeed: 0.01,
+    interactionRange: 3,
+  },
+  hard: {
+    playerSpeed: 0.03,
+    npcSpeed: 0.015,
+    interactionRange: 2,
+  },
+} as const;
+```
+
+**地图大小配置（未来扩展）**：
+```typescript
+export const MAP_SIZE_PRESETS = {
+  small: { mapSize: 50, coreArea: 15, resourceCount: 30 },
+  medium: { mapSize: 80, coreArea: 20, resourceCount: 60 },
+  large: { mapSize: 120, coreArea: 30, resourceCount: 100 },
+} as const;
+```
+
+### 影响范围
+
+**修改的文件（7个）**：
+1. `app/config/GameConfig.ts` - 新建配置文件
+2. `app/hooks/useGameLogic.ts` - 替换 37+ 处硬编码
+3. `app/components/Character/WorkerAgent.tsx` - 替换 35+ 处硬编码
+4. `app/components/Character/PlayerLeader.tsx` - 替换 27+ 处硬编码
+5. `app/components/World/ResourceTile.tsx` - 替换倒地动画参数
+6. `app/components/Game/GameScene.tsx` - 替换资源生成和相机配置
+7. `app/components/World/Environment.tsx` - 替换地形生成参数
+
+**总替换数**：100+ 处硬编码数值
+
 ## 维护指引
 - 新功能或改动时务必同步更新本文件（新增模块、数据流、交互变更、测试策略变更）。
 - 先更新文档，再补/改测试，提醒用户手动运行 `npm test`，全部通过后再视为完成开发。
 - Bug 修复应记录在"关键实现细节"相关章节，注明日期与问题描述。
 - **测试配置**：`vitest.config.ts` 中设置 `watch: false` 防止进入监视模式；`package.json` 中使用 `vitest run` 执行一次性测试。
+- **v0.2 后的开发**：新增角色/环境组件时，优先在对应目录创建独立文件；复杂业务逻辑考虑提取为 Hook；保持 GameScene 作为纯容器。
+- **v0.3 后的开发**：调整游戏参数时优先在 GameConfig.ts 中修改；新增配置项需添加注释说明单位；保持配置对象的 `as const` 断言。
 

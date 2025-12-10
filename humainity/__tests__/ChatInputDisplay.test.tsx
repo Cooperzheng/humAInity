@@ -25,7 +25,7 @@ describe('对话输入和显示功能测试', () => {
   it('输入框应该使用高对比度配色，确保文本清晰可见', () => {
     render(<GameUI leaderName="测试领袖" />);
     
-    const input = screen.getByPlaceholderText(/喊话（距离过远）.../);
+    const input = screen.getByPlaceholderText(/输入消息.../);
     expect(input).toBeInTheDocument();
     
     // 验证输入框使用了增强的配色方案
@@ -35,7 +35,7 @@ describe('对话输入和显示功能测试', () => {
     expect(input).toHaveClass('font-medium'); // 增强字重
   });
 
-  it('近场时输入框应显示"正在与德米特里交谈..."提示', () => {
+  it('近场时输入框应显示"与德米特里交谈..."提示', () => {
     useGameState.setState({
       isNearAgent: true,
       agentState: 'LISTENING',
@@ -43,7 +43,7 @@ describe('对话输入和显示功能测试', () => {
 
     render(<GameUI leaderName="测试领袖" />);
     
-    const input = screen.getByPlaceholderText(/正在与德米特里交谈.../);
+    const input = screen.getByPlaceholderText(/与德米特里交谈.../);
     expect(input).toBeInTheDocument();
   });
 
@@ -56,7 +56,7 @@ describe('对话输入和显示功能测试', () => {
 
     render(<GameUI leaderName="测试领袖" />);
     
-    const input = screen.getByPlaceholderText(/正在与德米特里交谈.../);
+    const input = screen.getByPlaceholderText(/与德米特里交谈.../);
     const sendButton = screen.getByRole('button', { name: /发送/ });
 
     // 输入消息
@@ -96,7 +96,7 @@ describe('对话输入和显示功能测试', () => {
 
     render(<GameUI leaderName="" />);
     
-    const input = screen.getByPlaceholderText(/喊话（距离过远）.../);
+    const input = screen.getByPlaceholderText(/输入消息.../);
     const sendButton = screen.getByRole('button', { name: /发送/ });
 
     await user.type(input, '测试消息');
@@ -125,7 +125,7 @@ describe('对话输入和显示功能测试', () => {
 
     render(<GameUI leaderName="测试领袖" />);
     
-    const input = screen.getByPlaceholderText(/正在与德米特里交谈.../);
+    const input = screen.getByPlaceholderText(/与德米特里交谈.../);
 
     await user.type(input, '砍树');
     await user.keyboard('{Enter}');
@@ -144,7 +144,7 @@ describe('对话输入和显示功能测试', () => {
     const user = userEvent.setup();
     render(<GameUI leaderName="测试领袖" />);
     
-    const input = screen.getByPlaceholderText(/喊话（距离过远）.../) as HTMLInputElement;
+    const input = screen.getByPlaceholderText(/输入消息.../) as HTMLInputElement;
     const sendButton = screen.getByRole('button', { name: /发送/ });
 
     await user.type(input, '测试消息');
@@ -162,7 +162,7 @@ describe('对话输入和显示功能测试', () => {
     const user = userEvent.setup();
     render(<GameUI leaderName="测试领袖" />);
     
-    const input = screen.getByPlaceholderText(/喊话（距离过远）.../);
+    const input = screen.getByPlaceholderText(/输入消息.../);
 
     // 初始状态
     expect(useGameState.getState().inputFocused).toBe(false);
@@ -186,7 +186,7 @@ describe('对话输入和显示功能测试', () => {
 
     render(<GameUI leaderName="测试领袖" />);
     
-    const input = screen.getByPlaceholderText(/正在与德米特里交谈.../);
+    const input = screen.getByPlaceholderText(/与德米特里交谈.../);
     const sendButton = screen.getByRole('button', { name: /发送/ });
 
     await user.type(input, '测试');
@@ -215,7 +215,7 @@ describe('对话输入和显示功能测试', () => {
 
     render(<GameUI leaderName="测试领袖" />);
     
-    const input = screen.getByPlaceholderText(/正在与德米特里交谈.../);
+    const input = screen.getByPlaceholderText(/与德米特里交谈.../);
     const sendButton = screen.getByRole('button', { name: /发送/ });
 
     // 发送第一条消息
@@ -268,7 +268,7 @@ describe('对话输入和显示功能测试', () => {
 
     render(<GameUI leaderName="测试领袖" />);
     
-    const input = screen.getByPlaceholderText(/正在与德米特里交谈.../);
+    const input = screen.getByPlaceholderText(/与德米特里交谈.../);
 
     // 失焦状态：应该只显示最近3条
     expect(screen.queryByText(/消息1/)).not.toBeInTheDocument();

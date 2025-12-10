@@ -104,23 +104,8 @@ export default function Home() {
       {/* 纸质纹理叠加 */}
       <div className="absolute inset-0 opacity-15 pointer-events-none" style={{backgroundImage: 'url("https://www.transparenttextures.com/patterns/natural-paper.png")'}}></div>
 
-      {/* 左上角退出图标按钮 */}
-      <button
-        onClick={() => setGameStarted(false)}
-        className="absolute top-4 left-4 z-30 w-10 h-10 rounded-full bg-[#A0522D]/90 hover:bg-[#A0522D] border border-[#8B4513] shadow-lg flex items-center justify-center text-[#F2EEE5] text-lg hover:scale-105 active:scale-95 transition-all"
-        title="退出场景"
-      >
-        ⏻
-      </button>
-
       {/* 3D 场景 */}
       <GameScene leaderName={leaderName} />
-
-      {/* 控制提示 */}
-      <div className="absolute bottom-6 right-6 z-10 px-4 py-2 bg-[#2B2B2B]/70 backdrop-blur-sm border border-[#B08D55]/50 text-xs text-stone-300 font-serif">
-        <p>🖱️ 拖拽旋转 | 滚轮缩放 | 右键平移</p>
-        <p className="mt-1">⌨️ WASD 移动玩家（橙色）</p>
-      </div>
     </div>
   );
 }

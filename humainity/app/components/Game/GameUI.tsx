@@ -3,6 +3,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useGameState } from './GameState';
 import { EarIcon } from '../Icons/EarIcon';
+import { MouseWheelIcon } from '../Icons/MouseWheelIcon';
 
 interface GameUIProps {
   leaderName: string;
@@ -81,11 +82,8 @@ export default function GameUI({ leaderName }: GameUIProps) {
     }
   }, [lastChatLog, inputFocused]);
 
-  // 修复：ASKING状态也应该显示"正在交谈"，因为这是对话的一部分
-  const placeholder =
-    isNearAgent && (agentState === 'LISTENING' || agentState === 'ASKING')
-      ? '正在与德米特里交谈...'
-      : '喊话（距离过远）...';
+  // 动态占位符：简洁明了
+  const placeholder = isNearAgent ? '与德米特里交谈...' : '输入消息...';
 
   const handleSend = () => {
     const text = message.trim();
@@ -119,16 +117,43 @@ export default function GameUI({ leaderName }: GameUIProps) {
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20 select-none">
-      {/* 资源面板 - 左上 */}
-      <div className="pointer-events-auto absolute top-4 left-4 px-4 py-3 bg-stone-300 border-2 border-stone-800 shadow-lg text-sm text-stone-900 font-serif">
-        <div className="font-bold tracking-wide text-base mb-2">资源</div>
+      {/* 资源面板 - 左上（HUD）：紧凑设计 */}
+      <div className="pointer-events-auto absolute top-4 left-4 px-3 py-2 bg-stone-300 border-2 border-stone-800 shadow-lg text-sm text-stone-900 font-serif">
+        <div className="font-bold tracking-wide text-base mb-1">资源</div>
         <div className="mt-1 text-sm">🪵 木材：{wood}</div>
         <div className="mt-1 text-sm">🍎 食物：{food}</div>
       </div>
 
-      {/* 日志窗口 - 右侧 */}
+      {/* 操作指引 - 左侧中间（智能隐藏：输入聚焦时隐藏，淡化存在感）*/}
+      {!inputFocused && (
+        <div className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 bg-black/20 px-3 py-2 rounded transition-opacity duration-300 font-serif">
+          <div className="space-y-2 text-stone-300 text-xs">
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1">
+                <kbd className="px-1.5 py-0.5 bg-stone-800/40 text-stone-200 border border-stone-600/30 rounded font-mono text-xs">W</kbd>
+                <kbd className="px-1.5 py-0.5 bg-stone-800/40 text-stone-200 border border-stone-600/30 rounded font-mono text-xs">A</kbd>
+                <kbd className="px-1.5 py-0.5 bg-stone-800/40 text-stone-200 border border-stone-600/30 rounded font-mono text-xs">S</kbd>
+                <kbd className="px-1.5 py-0.5 bg-stone-800/40 text-stone-200 border border-stone-600/30 rounded font-mono text-xs">D</kbd>
+              </div>
+              <span>移动</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <kbd className="px-1.5 py-0.5 bg-stone-800/40 text-stone-200 border border-stone-600/30 rounded font-mono text-xs">Enter</kbd>
+              <span>交谈</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="px-1.5 py-0.5 bg-stone-800/40 text-stone-200 border border-stone-600/30 rounded flex items-center justify-center">
+                <MouseWheelIcon size={14} className="text-stone-200" />
+              </div>
+              <span>缩放视角</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 日志窗口 - 右上（位置下移，为未来系统菜单预留空间）*/}
       <div
-        className={`pointer-events-auto absolute top-4 right-4 w-80 border-2 border-stone-700 overflow-hidden transition-all shadow-lg font-serif ${
+        className={`pointer-events-auto absolute top-12 right-4 w-80 border-2 border-stone-700 overflow-hidden transition-all shadow-lg font-serif ${
           expanded ? 'bg-stone-300' : 'bg-stone-200'
         }`}
       >
@@ -155,8 +180,8 @@ export default function GameUI({ leaderName }: GameUIProps) {
         </div>
       </div>
 
-      {/* 对话面板 - 底部居中 */}
-      <div className="pointer-events-auto absolute bottom-4 left-1/2 -translate-x-1/2 w-[720px] max-w-[92vw] font-serif">
+      {/* 对话面板 - 底部居中（灵动岛设计，紧凑版）*/}
+      <div className="pointer-events-auto absolute bottom-4 left-1/2 -translate-x-1/2 w-80 max-w-[92vw] font-serif">
         {/* 对话历史区：失焦5秒后自动隐藏，聚焦时显示所有对话并支持滚动 */}
         {showChatHistory && (
           <div className={`mb-2 ${inputFocused ? 'max-h-60' : 'max-h-28'} overflow-y-auto space-y-1 scrollbar-classic px-3 py-2 bg-[#D2B48C]/90 border-2 border-[#654321]`}>
@@ -170,14 +195,25 @@ export default function GameUI({ leaderName }: GameUIProps) {
             ))}
           </div>
         )}
-        <div className="flex items-center gap-2 bg-[#8C6B3D] border-2 border-[#654321] px-4 py-3 shadow-lg">
-          <span className="text-lg text-[#F2EEE5]">
-            {isNearAgent && agentState === 'LISTENING' ? (
-              <EarIcon size={20} className="text-[#F2EEE5]" />
+        
+        {/* 灵动岛输入框：[状态指示器] [输入框] [发送按钮] */}
+        <div className="flex items-stretch bg-[#8C6B3D] border-2 border-[#654321] shadow-lg overflow-hidden">
+          {/* 状态指示器：灰色气泡 💬 / 金色耳朵 👂 + 呼吸动画 */}
+          <div
+            className={`w-12 h-12 flex items-center justify-center transition-all duration-300 ${
+              isNearAgent && (agentState === 'LISTENING' || agentState === 'ASKING')
+                ? 'bg-amber-500/30'
+                : 'bg-stone-600/50'
+            }`}
+          >
+            {isNearAgent && (agentState === 'LISTENING' || agentState === 'ASKING') ? (
+              <EarIcon size={24} className="text-amber-400 animate-pulse" />
             ) : (
-              '💬'
+              <span className="text-xl">💬</span>
             )}
-          </span>
+          </div>
+
+          {/* 输入框 */}
           <input
             value={message}
             onChange={(e) => setMessage(e.target.value)}
@@ -186,12 +222,14 @@ export default function GameUI({ leaderName }: GameUIProps) {
             }}
             onFocus={() => {
               setInputFocused(true);
-              setShowChatHistory(true); // 关键修复：立即显示对话历史
+              setShowChatHistory(true);
             }}
             onBlur={() => setInputFocused(false)}
             placeholder={placeholder}
-            className={`flex-1 bg-[#E8DCC8] px-3 py-2 outline-none text-sm text-[#2B2B2B] placeholder:text-stone-700 font-medium`}
+            className="flex-1 bg-[#E8DCC8] px-3 py-2 outline-none text-sm text-[#2B2B2B] placeholder:text-stone-700 font-medium"
           />
+
+          {/* 发送按钮 */}
           <button
             onClick={handleSend}
             className="px-4 py-2 bg-[#654321] hover:bg-[#B08D55] text-[#F2EEE5] text-sm font-semibold transition-colors"

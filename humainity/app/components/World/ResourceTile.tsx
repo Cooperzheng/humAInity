@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { RESOURCE_CONFIG } from '../../config/GameConfig';
 
 export type ResourceType = 'tree' | 'stone';
 
@@ -23,11 +24,11 @@ export default function ResourceTile({ position, type, state = 'normal', onFallC
     if (state === 'falling' && groupRef.current && type === 'tree') {
       // 绕Z轴旋转，模拟树木倒地
       if (groupRef.current.rotation.z < Math.PI / 2) {
-        groupRef.current.rotation.z += 0.05; // 旋转速度
+        groupRef.current.rotation.z += RESOURCE_CONFIG.treeFallRotationSpeed; // 旋转速度
       } else if (!fallCompleteCalledRef.current) {
         // 倒地完成，延迟后触发回调
         fallCompleteCalledRef.current = true;
-        setTimeout(() => onFallComplete?.(), 500);
+        setTimeout(() => onFallComplete?.(), RESOURCE_CONFIG.treeFallCompleteDelay);
       }
     }
   });

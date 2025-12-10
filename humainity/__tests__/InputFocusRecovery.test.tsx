@@ -77,7 +77,7 @@ describe('InputFocusRecovery - 输入焦点恢复测试', () => {
     render(<GameScene leaderName="测试领袖" />);
 
     // 找到输入框并聚焦
-    const input = screen.getByPlaceholderText(/喊话|交谈/);
+    const input = screen.getByPlaceholderText(/输入消息|交谈/);
     await user.click(input);
 
     // 手动设置状态，模拟输入框已聚焦
@@ -104,7 +104,7 @@ describe('InputFocusRecovery - 输入焦点恢复测试', () => {
     const user = userEvent.setup();
     render(<GameScene leaderName="测试领袖" />);
 
-    const input = screen.getByPlaceholderText(/喊话|交谈/) as HTMLInputElement;
+    const input = screen.getByPlaceholderText(/输入消息|交谈/) as HTMLInputElement;
 
     // 聚焦输入框
     await user.click(input);
@@ -135,7 +135,7 @@ describe('InputFocusRecovery - 输入焦点恢复测试', () => {
     const user = userEvent.setup();
     render(<GameScene leaderName="测试领袖" />);
 
-    const input = screen.getByPlaceholderText(/喊话|交谈/);
+    const input = screen.getByPlaceholderText(/输入消息|交谈/);
 
     // 模拟真实场景：在输入框打字
     await user.click(input);
@@ -196,7 +196,7 @@ describe('InputFocusRecovery - 输入焦点恢复测试', () => {
     expect(useGameState.getState().inputFocused).toBe(false);
 
     // 2. 聚焦输入框并打字
-    const input = screen.getByPlaceholderText(/喊话|交谈/);
+    const input = screen.getByPlaceholderText(/输入消息|交谈/);
     await user.click(input);
     await user.type(input, '砍树5棵');
     
@@ -228,7 +228,7 @@ describe('InputFocusRecovery - 输入焦点恢复测试', () => {
     const user = userEvent.setup();
     render(<GameScene leaderName="测试领袖" />);
 
-    const input = screen.getByPlaceholderText(/喊话|交谈/);
+    const input = screen.getByPlaceholderText(/输入消息|交谈/);
 
     // 聚焦并输入
     await user.click(input);
