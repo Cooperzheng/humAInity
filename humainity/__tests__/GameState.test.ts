@@ -6,6 +6,7 @@ const resetStore = () =>
   act(() =>
     useGameState.setState({
       wood: 0,
+      food: 0,
       logs: [],
       isNearAgent: false,
       inputFocused: false,
@@ -19,10 +20,24 @@ describe('useGameState store', () => {
     resetStore();
   });
 
+  it('初始状态：wood 和 food 均为 0', () => {
+    const state = useGameState.getState();
+    expect(state.wood).toBe(0);
+    expect(state.food).toBe(0);
+  });
+
   it('addWood 累加资源', () => {
     const { addWood } = useGameState.getState();
     act(() => addWood(2));
     expect(useGameState.getState().wood).toBe(2);
+  });
+
+  it('addFood 累加食物资源', () => {
+    const { addFood } = useGameState.getState();
+    act(() => addFood(3));
+    expect(useGameState.getState().food).toBe(3);
+    act(() => addFood(2));
+    expect(useGameState.getState().food).toBe(5);
   });
 
   it('addLog 记录系统日志', () => {

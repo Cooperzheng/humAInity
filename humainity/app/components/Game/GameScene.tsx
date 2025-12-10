@@ -254,12 +254,13 @@ const PlayerLeader = forwardRef<THREE.Group, PlayerLeaderProps>(function PlayerL
 interface WorkerAgentProps {
   playerRef: React.RefObject<THREE.Group>;
   agentState: AgentState;
+  isNearAgent: boolean; // 新增：玩家是否在近场
   actionTarget: { x: number; z: number } | null;
   onActionDone: () => void;
 }
 
 const WorkerAgent = forwardRef<THREE.Group, WorkerAgentProps>(function WorkerAgent(
-  { playerRef, agentState, actionTarget, onActionDone },
+  { playerRef, agentState, isNearAgent, actionTarget, onActionDone },
   ref
 ) {
   const groupRef = useRef<THREE.Group>(null);
@@ -292,10 +293,17 @@ const WorkerAgent = forwardRef<THREE.Group, WorkerAgentProps>(function WorkerAge
       let moving = false;
       if (dist > 0.15) {
         moving = true;
+        isSwingingRef.current = false; // 还在移动，不是挥动状态
         me.position.x += (dx / dist) * moveSpeedRef.current;
         me.position.z += (dz / dist) * moveSpeedRef.current;
       } else {
-        // 到达目标 -> 挥动 3 次后回调
+        // 到达目标 -> 挥动
+        // 关键修复：第一次进入挥动状态时，重置 swingPhase
+        if (!isSwingingRef.current) {
+          swingPhase.current = 0;
+          isSwingingRef.current = true;
+        }
+        
         swingPhase.current += delta * 6;
         const amp = 0.5;
         const angle = Math.sin(swingPhase.current) * amp;
@@ -303,9 +311,10 @@ const WorkerAgent = forwardRef<THREE.Group, WorkerAgentProps>(function WorkerAge
           leftArmRef.current.rotation.x = angle;
           rightArmRef.current.rotation.x = -angle;
         }
-        // 简化：约 3 次挥动后（~1秒）回调
-        if (swingPhase.current > Math.PI * 3) {
+        // 延长挥动时间：约 8 次挥动后（~4秒）回调
+        if (swingPhase.current > Math.PI * 8) {
           swingPhase.current = 0;
+          isSwingingRef.current = false; // 重置标志
           onActionDone();
         }
         return;
@@ -427,7 +436,7 @@ const WorkerAgent = forwardRef<THREE.Group, WorkerAgentProps>(function WorkerAge
           whiteSpace: 'nowrap',
           pointerEvents: 'none'
         }}>
-          {agentState === 'LISTENING' ? '👂 ' : agentState === 'THINKING' ? '⚙️ ' : agentState === 'ACTING' ? '🪓 ' : ''}德米特里
+          {isNearAgent && agentState === 'LISTENING' ? '👂 ' : agentState === 'THINKING' ? '⚙️ ' : agentState === 'ACTING' ? '🪓 ' : ''}德米特里
         </div>
       </Html>
     </group>
@@ -439,6 +448,7 @@ type Resource = {
   id: number;
   type: ResourceType;
   position: [number, number, number];
+  state?: 'normal' | 'falling';
 };
 
 function GameSceneInner({ leaderName }: { leaderName: string }) {
@@ -461,10 +471,12 @@ function GameSceneInner({ leaderName }: { leaderName: string }) {
   const [actionTarget, setActionTarget] = useState<{ x: number; z: number } | null>(null);
   const actionDoneRef = useRef<() => void>(() => {});
 
+  // 使用 ref 缓存上一次的状态，避免频繁更新
+  const lastNearRef = useRef(false);
+  const lastAgentStateRef = useRef<AgentState>('IDLE');
+
   // 近场检测
   useFrame(() => {
-    // 如果玩家在输入，不更新近场状态，避免初始就被锁定为 LISTENING
-    if (inputFocused) return;
     if (!playerRef.current || !agentRef.current) return;
     const p = playerRef.current.position;
     const a = agentRef.current.position;
@@ -472,14 +484,28 @@ function GameSceneInner({ leaderName }: { leaderName: string }) {
     const dz = p.z - a.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
     const near = dist < 3;
-    setNearAgent(near);
+    
+    // 始终更新近场状态，即使在输入时也要保持状态同步
+    // 但只在状态真正改变时才调用 setState，减少不必要的渲染
+    if (near !== lastNearRef.current) {
+      lastNearRef.current = near;
+      setNearAgent(near);
+    }
 
-    // 如果玩家正在输入，则不要强制切换 LISTENING，避免一开始默认进入输入态
-    if (agentState === 'THINKING' || agentState === 'ACTING' || agentState === 'ASKING') return;
+    // 如果玩家正在输入，或NPC正在执行任务，不要强制切换状态
+    if (inputFocused || agentState === 'THINKING' || agentState === 'ACTING' || agentState === 'ASKING') return;
+    
+    let newState: AgentState | null = null;
     if (near) {
-      if (agentState !== 'LISTENING') setAgentState('LISTENING');
+      if (agentState !== 'LISTENING') newState = 'LISTENING';
     } else {
-      if (agentState !== 'IDLE') setAgentState('IDLE');
+      if (agentState !== 'IDLE') newState = 'IDLE';
+    }
+    
+    // 只在状态真正需要改变时才更新
+    if (newState && newState !== lastAgentStateRef.current) {
+      lastAgentStateRef.current = newState;
+      setAgentState(newState);
     }
   });
 
@@ -497,11 +523,30 @@ function GameSceneInner({ leaderName }: { leaderName: string }) {
     if (waitingQuantityRef.current) return;
     setPendingCommand(null);
 
+    // 安全检查：如果 ref 未初始化，使用状态变量作为后备
+    let isReallyNear = isNearAgent; // 默认使用状态变量
+    
+    if (playerRef.current && agentRef.current && 
+        playerRef.current.position && agentRef.current.position) {
+      // 关键修复：实时计算距离，不依赖可能过时的 isNearAgent 状态
+      const p = playerRef.current.position;
+      const a = agentRef.current.position;
+      const dx = p.x - a.x;
+      const dz = p.z - a.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      isReallyNear = dist < 3;
+      
+      console.log('[GameScene] Processing command:', cmd, 'distance:', dist.toFixed(2), 'isReallyNear:', isReallyNear, 'agentState:', agentState);
+    } else {
+      console.log('[GameScene] Processing command:', cmd, 'refs not ready, using isNearAgent:', isReallyNear, 'agentState:', agentState);
+    }
+
     const lower = cmd.toLowerCase();
     const isChop = lower.includes('砍树') || lower.includes('伐木');
 
-    if (!isNearAgent || agentState !== 'LISTENING') {
-      addLog('系统：距离过远，未能传达指令。', 'system');
+    if (!isReallyNear || agentState !== 'LISTENING') {
+      // 修复：改为 chat 类型，让用户在对话框中看到反馈
+      setTimeout(() => addLog('德米特里: （距离太远，我听不到你在说什么...）', 'chat'), getRandomDelay(800, 1400));
       return;
     }
 
@@ -533,8 +578,10 @@ function GameSceneInner({ leaderName }: { leaderName: string }) {
     if (!numMatch) {
       setAgentState('ASKING');
       waitingQuantityRef.current = true;
-      // 随机延迟，模拟 NPC 没听清的反应时间
-      setTimeout(() => addLog('德米特里: 没听清数量，请再说一次数字。', 'chat'), getRandomDelay(700, 1300));
+      // 关键修复：串联延迟，确保"没听清"在"需要砍几棵树？"之后1-2秒显示
+      const firstDelay = getRandomDelay(800, 1400);
+      const secondDelay = getRandomDelay(1000, 2000);
+      setTimeout(() => addLog('德米特里: 没听清数量，请再说一次数字。', 'chat'), firstDelay + secondDelay);
       return;
     }
     const qty = Math.max(1, Math.min(20, parseInt(numMatch[0], 10)));
@@ -570,6 +617,9 @@ function GameSceneInner({ leaderName }: { leaderName: string }) {
         return;
       }
 
+      // 记录玩家命令NPC的交互日志
+      addLog(`系统：${leaderName}命令德米特里砍伐${qty}棵树木，德米特里接受任务。`, 'system');
+      
       // 设置目标并进入 ACTING 状态
       setActionTarget({ x: nearestTree.position[0], z: nearestTree.position[2] });
       setAgentState('ACTING');
@@ -621,7 +671,12 @@ function GameSceneInner({ leaderName }: { leaderName: string }) {
       
       {/* 资源 */}
       {resources.map((r) => (
-        <ResourceTile key={r.id} position={r.position} type={r.type} />
+        <ResourceTile 
+          key={r.id} 
+          position={r.position} 
+          type={r.type} 
+          state={r.state}
+        />
       ))}
       
       {/* 角色 */}
@@ -630,17 +685,19 @@ function GameSceneInner({ leaderName }: { leaderName: string }) {
         ref={agentRef}
         playerRef={playerRef}
         agentState={agentState}
+        isNearAgent={isNearAgent}
         actionTarget={actionTarget}
         onActionDone={() => {
-          // 完成一次砍树
-          // 找最近树并删除
+          // 完成一次砍树 - 标记树木为倒地状态，而非立即删除
+          let treeId: number | null = null;
+          
           setResources((prev) => {
             if (!agentRef.current) return prev;
             const aPos = agentRef.current.position;
             let nearestIndex = -1;
             let best = Infinity;
             prev.forEach((r, idx) => {
-              if (r.type !== 'tree') return;
+              if (r.type !== 'tree' || r.state === 'falling') return;
               const dx = r.position[0] - aPos.x;
               const dz = r.position[2] - aPos.z;
               const d = dx * dx + dz * dz;
@@ -650,10 +707,20 @@ function GameSceneInner({ leaderName }: { leaderName: string }) {
               }
             });
             if (nearestIndex === -1) return prev;
+            
+            // 标记为falling状态
             const clone = [...prev];
-            clone.splice(nearestIndex, 1);
+            treeId = clone[nearestIndex].id;
+            clone[nearestIndex] = { ...clone[nearestIndex], state: 'falling' };
+            
+            // 2秒后删除树木（倒地动画完成后）
+            setTimeout(() => {
+              setResources((current) => current.filter((r) => r.id !== treeId));
+            }, 2000);
+            
             return clone;
           });
+          
           addWood(1);
           addLog('系统：德米特里砍伐了树木，木材 +1。', 'system');
           chopQueueRef.current = Math.max(0, chopQueueRef.current - 1);
@@ -663,9 +730,9 @@ function GameSceneInner({ leaderName }: { leaderName: string }) {
             if (!agentRef.current) return;
             const aPos = agentRef.current.position;
             
-            // 重新获取当前的 resources（因为刚删除了一棵）
+            // 重新获取当前的 resources（因为刚标记了一棵为falling）
             setResources((currentResources) => {
-              const treesLeft = currentResources.filter((r) => r.type === 'tree');
+              const treesLeft = currentResources.filter((r) => r.type === 'tree' && r.state !== 'falling');
               
               if (treesLeft.length === 0) {
                 addLog('系统：没有树木可砍了。', 'system');
@@ -742,14 +809,31 @@ interface GameSceneProps {
 
 export default function GameScene({ leaderName }: GameSceneProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const { setInputFocused } = useGameState();
+
+  // 处理点击游戏区域：强制清除输入焦点，确保WASD控制恢复
+  const handlePointerDown = () => {
+    // 强制清除所有输入框焦点
+    const activeElement = document.activeElement as HTMLElement;
+    if (activeElement && activeElement.tagName === 'INPUT') {
+      activeElement.blur();
+    }
+    // 重置焦点状态
+    setInputFocused(false);
+    // 让Canvas获得焦点，确保WASD事件能被捕获
+    wrapperRef.current?.focus();
+  };
 
   return (
     <div
       ref={wrapperRef}
       tabIndex={0}
       style={{ width: '100%', height: '100%', outline: 'none' }}
-      onPointerDown={() => wrapperRef.current?.focus()}
-      onFocus={() => console.log('Canvas focused - WASD should work now')}
+      onPointerDown={handlePointerDown}
+      onFocus={() => {
+        console.log('Canvas focused - WASD should work now');
+        setInputFocused(false); // 双重保险：Canvas获得焦点时也重置状态
+      }}
       onKeyDown={(e) => {
         const k = e.key.toLowerCase();
         if (['w', 'a', 's', 'd'].includes(k)) {

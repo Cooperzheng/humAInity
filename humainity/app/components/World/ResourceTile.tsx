@@ -1,20 +1,41 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
+import * as THREE from 'three';
 
 export type ResourceType = 'tree' | 'stone';
 
 interface ResourceTileProps {
   position: [number, number, number];
   type: ResourceType;
+  state?: 'normal' | 'falling';
+  onFallComplete?: () => void;
 }
 
-export default function ResourceTile({ position, type }: ResourceTileProps) {
+export default function ResourceTile({ position, type, state = 'normal', onFallComplete }: ResourceTileProps) {
   const [hovered, setHovered] = useState(false);
+  const groupRef = useRef<THREE.Group>(null);
+  const fallCompleteCalledRef = useRef(false);
+
+  // 倒地动画逻辑
+  useFrame(() => {
+    if (state === 'falling' && groupRef.current && type === 'tree') {
+      // 绕Z轴旋转，模拟树木倒地
+      if (groupRef.current.rotation.z < Math.PI / 2) {
+        groupRef.current.rotation.z += 0.05; // 旋转速度
+      } else if (!fallCompleteCalledRef.current) {
+        // 倒地完成，延迟后触发回调
+        fallCompleteCalledRef.current = true;
+        setTimeout(() => onFallComplete?.(), 500);
+      }
+    }
+  });
 
   if (type === 'tree') {
     return (
       <group
+        ref={groupRef}
         position={position}
         onPointerOver={() => setHovered(true)}
         onPointerOut={() => setHovered(false)}

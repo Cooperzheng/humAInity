@@ -7,6 +7,7 @@ export default defineConfig({
     setupFiles: './vitest.setup.ts',
     globals: true,
     css: true,
+    watch: false,
     coverage: {
       enabled: false,
     },

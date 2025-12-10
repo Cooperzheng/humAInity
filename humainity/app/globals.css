@@ -10,6 +10,11 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  /* 古典色板 */
+  --color-wood-dark: #654321;
+  --color-wood-medium: #8C6B3D;
+  --color-wood-light: #D2B48C;
+  --color-copper: #B08D55;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,4 +28,23 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* 古典滚动条样式 */
+.scrollbar-classic::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-classic::-webkit-scrollbar-track {
+  background: #e7d5c1;
+}
+
+.scrollbar-classic::-webkit-scrollbar-thumb {
+  background: #8C6B3D;
+  border-radius: 4px;
+}
+
+.scrollbar-classic::-webkit-scrollbar-thumb:hover {
+  background: #B08D55;
 }
