@@ -41,6 +41,12 @@ export const INTERACTION_CONFIG = {
   stateCheckDelay: 100,           // 状态检查延迟 (毫秒)
 } as const;
 
+// 4.1 HISMA Delays - HISMA 状态结算/驻留延迟配置
+export const HISMA_DELAY_CONFIG = {
+  deliveryUnloadMs: 1500, // DELIVERING 到达后的卸货驻留时间 (毫秒)
+  eatingMs: 2000,         // EATING 进食表现时间 (毫秒)
+} as const;
+
 // 5. Action Configuration - 动作配置
 export const ACTION_CONFIG = {
   chopSwingSpeed: 6,              // 砍树挥动速度

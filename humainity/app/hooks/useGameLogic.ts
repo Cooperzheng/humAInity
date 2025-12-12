@@ -7,6 +7,7 @@ import { useGameState, AgentState } from '../components/Game/GameState';
 import { ResourceType } from '../components/World/ResourceTile';
 import {
   INTERACTION_CONFIG,
+  HISMA_DELAY_CONFIG,
   RESPONSE_DELAY_CONFIG,
   ACTION_CONFIG,
   RESOURCE_CONFIG,
@@ -74,6 +75,51 @@ export function useGameLogic({
   const lastNearRef = useRef(false);
   // 缓存待更新的状态，避免在 useFrame 中直接调用 setState
   const pendingStateUpdateRef = useRef<AgentState | null>(null);
+  // HISMA: 状态锁定（用于“卸货/进食”等短暂停留期间，禁止近场逻辑抢占）
+  const stateLockUntilRef = useRef<number>(0);
+  // 统一管理本 Hook 内创建的 timeout，避免卸载/状态切换后回写
+  const timeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const registerTimeout = (id: ReturnType<typeof setTimeout>) => {
+    timeoutsRef.current.push(id);
+    return id;
+  };
+  const eatingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const postDeliveryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const arrivalHandledRef = useRef({
+    seekingFood: false,
+    delivering: false,
+    sleeping: false,
+  });
+
+  const arbitrateIdleOrListening = (): AgentState => {
+    if (!agentRef.current || !playerRef.current) return 'IDLE';
+    const dx = playerRef.current.position.x - agentRef.current.position.x;
+    const dz = playerRef.current.position.z - agentRef.current.position.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    return dist < INTERACTION_CONFIG.interactionRange ? 'LISTENING' : 'IDLE';
+  };
+
+  // unmount cleanup：清理所有 timeout，避免 setState on unmounted
+  useEffect(() => {
+    return () => {
+      timeoutsRef.current.forEach((t) => clearTimeout(t));
+      timeoutsRef.current = [];
+      if (eatingTimeoutRef.current) clearTimeout(eatingTimeoutRef.current);
+      if (postDeliveryTimeoutRef.current) clearTimeout(postDeliveryTimeoutRef.current);
+    };
+  }, []);
+
+  // 状态切换时，取消不再需要的延迟回调，避免旧计时器回写
+  useEffect(() => {
+    if (agentState !== 'EATING' && eatingTimeoutRef.current) {
+      clearTimeout(eatingTimeoutRef.current);
+      eatingTimeoutRef.current = null;
+    }
+    if (agentState !== 'IDLE' && postDeliveryTimeoutRef.current) {
+      clearTimeout(postDeliveryTimeoutRef.current);
+      postDeliveryTimeoutRef.current = null;
+    }
+  }, [agentState]);
 
   // 近场检测
   useFrame(() => {
@@ -92,8 +138,112 @@ export function useGameLogic({
       setNearAgent(near);
     }
 
-    // 如果玩家正在输入，或NPC正在执行任务，不要强制切换状态
-    if (inputFocused || agentState === 'THINKING' || agentState === 'ACTING' || agentState === 'ASKING') return;
+    // ====== HISMA: 到达检测（必须在 useFrame 中做，确保位置变化能触发） ======
+    // SEEKING_FOOD：到达储粮点 -> 切换 EATING，并在延迟后结算
+    if (agentState === 'SEEKING_FOOD' && actionTarget && !arrivalHandledRef.current.seekingFood) {
+      const dx2 = agentRef.current.position.x - actionTarget.x;
+      const dz2 = agentRef.current.position.z - actionTarget.z;
+      const dist2 = Math.sqrt(dx2 * dx2 + dz2 * dz2);
+      if (dist2 < INTERACTION_CONFIG.arrivalThreshold) {
+        arrivalHandledRef.current.seekingFood = true;
+
+        // 到达后开始“吃饭表现”
+        setAgentState('EATING');
+        stateLockUntilRef.current = Date.now() + HISMA_DELAY_CONFIG.eatingMs;
+
+        // 进食期间停在原地
+        setActionTarget(null);
+
+        if (eatingTimeoutRef.current) clearTimeout(eatingTimeoutRef.current);
+        eatingTimeoutRef.current = registerTimeout(setTimeout(() => {
+          // 若状态已被打断（理论上不会），则不结算
+          const current = useGameState.getState().agents['dmitri'];
+          if (!current || current.state !== 'EATING') return;
+
+          let consumed = false;
+          let restoredAmount = 0;
+
+          // 优先吃肉，再吃浆果
+          if (consumeResource('meat', 1)) {
+            restoredAmount = FOOD_TYPES.meat.restore;
+            consumed = true;
+            addLog(`系统：德米特里食用了${FOOD_TYPES.meat.icon}${FOOD_TYPES.meat.name}，恢复饱食度 +${restoredAmount}。`, 'system');
+          } else if (consumeResource('berry', 1)) {
+            restoredAmount = FOOD_TYPES.berry.restore;
+            consumed = true;
+            addLog(`系统：德米特里食用了${FOOD_TYPES.berry.icon}${FOOD_TYPES.berry.name}，恢复饱食度 +${restoredAmount}。`, 'system');
+          }
+
+          const d = useGameState.getState().agents['dmitri'];
+          if (consumed && d) {
+            const newSatiety = Math.min(100, d.stats.satiety + restoredAmount);
+            updateAgent('dmitri', { stats: { ...d.stats, satiety: newSatiety } });
+          }
+
+          // 进食结束：按距离仲裁（你选择：near->LISTENING，否则->IDLE）
+          setAgentState(arbitrateIdleOrListening());
+        }, HISMA_DELAY_CONFIG.eatingMs));
+      }
+    } else if (agentState !== 'SEEKING_FOOD') {
+      arrivalHandledRef.current.seekingFood = false;
+    }
+
+    // DELIVERING：到达储粮点 -> 入库后“卸货驻留”延迟，再仲裁
+    if (agentState === 'DELIVERING' && actionTarget && !arrivalHandledRef.current.delivering) {
+      const dx2 = agentRef.current.position.x - actionTarget.x;
+      const dz2 = agentRef.current.position.z - actionTarget.z;
+      const dist2 = Math.sqrt(dx2 * dx2 + dz2 * dz2);
+      if (dist2 < INTERACTION_CONFIG.arrivalThreshold) {
+        arrivalHandledRef.current.delivering = true;
+
+        addResource('wood', RESOURCE_CONFIG.woodPerTree);
+        addLog('系统：德米特里将木材送回储粮点，木材 +1。', 'system');
+
+        setActionTarget(null);
+        setAgentState('IDLE'); // 卸货期间保持 IDLE
+        stateLockUntilRef.current = Date.now() + HISMA_DELAY_CONFIG.deliveryUnloadMs;
+
+        if (postDeliveryTimeoutRef.current) clearTimeout(postDeliveryTimeoutRef.current);
+        postDeliveryTimeoutRef.current = registerTimeout(setTimeout(() => {
+          // 卸货结束：按距离仲裁
+          setAgentState(arbitrateIdleOrListening());
+        }, HISMA_DELAY_CONFIG.deliveryUnloadMs));
+      }
+    } else if (agentState !== 'DELIVERING') {
+      arrivalHandledRef.current.delivering = false;
+    }
+
+    // SLEEPING：到达篝火后，停留（由 useSurvival 控制何时醒来）
+    if (agentState === 'SLEEPING' && actionTarget && !arrivalHandledRef.current.sleeping) {
+      const dx2 = agentRef.current.position.x - actionTarget.x;
+      const dz2 = agentRef.current.position.z - actionTarget.z;
+      const dist2 = Math.sqrt(dx2 * dx2 + dz2 * dz2);
+      if (dist2 < INTERACTION_CONFIG.arrivalThreshold) {
+        arrivalHandledRef.current.sleeping = true;
+        setActionTarget(null);
+        addLog('系统：德米特里在篝火旁沉沉睡去...', 'system');
+      }
+    } else if (agentState !== 'SLEEPING') {
+      arrivalHandledRef.current.sleeping = false;
+    }
+
+    // ====== 近场自动切换：仅在非执行状态 + 非锁定期内生效 ======
+    const now = Date.now();
+    if (now < stateLockUntilRef.current) return;
+
+    // 如果玩家正在输入，或NPC正在执行任务/生存动作，不要强制切换状态
+    if (
+      inputFocused ||
+      agentState === 'THINKING' ||
+      agentState === 'ACTING' ||
+      agentState === 'ASKING' ||
+      agentState === 'SEEKING_FOOD' ||
+      agentState === 'EATING' ||
+      agentState === 'DELIVERING' ||
+      agentState === 'SLEEPING' ||
+      agentState === 'EXHAUSTED' ||
+      agentState === 'STARVING'
+    ) return;
     
     // 根据距离决定目标状态，使用 ref 缓存避免在渲染期间 setState
     if (near && agentState !== 'LISTENING') {
@@ -170,21 +320,21 @@ export function useGameLogic({
 
     if (!isReallyNear || agentState !== 'LISTENING') {
       // 修复：改为 chat 类型，让用户在对话框中看到反馈
-      setTimeout(() => addLog('德米特里: （距离太远，我听不到你在说什么...）', 'chat'), getRandomDelay(RESPONSE_DELAY_CONFIG.tooFar));
+      registerTimeout(setTimeout(() => addLog('德米特里: （距离太远，我听不到你在说什么...）', 'chat'), getRandomDelay(RESPONSE_DELAY_CONFIG.tooFar)));
       return;
     }
 
     // 玩家消息已在 GameUI 中立即显示，这里不再重复
     if (!isChop) {
       // 随机延迟 NPC 回复
-      setTimeout(() => addLog('德米特里: 收到，但我暂时只会砍树相关的指令。', 'chat'), getRandomDelay(RESPONSE_DELAY_CONFIG.unsupportedCommand));
+      registerTimeout(setTimeout(() => addLog('德米特里: 收到，但我暂时只会砍树相关的指令。', 'chat'), getRandomDelay(RESPONSE_DELAY_CONFIG.unsupportedCommand)));
       return;
     }
 
     // 询问数量（随机延迟）
     setAgentState('ASKING');
     waitingQuantityRef.current = true;
-    setTimeout(() => addLog('德米特里: 需要砍几棵树？', 'chat'), getRandomDelay(RESPONSE_DELAY_CONFIG.askQuantity));
+    registerTimeout(setTimeout(() => addLog('德米特里: 需要砍几棵树？', 'chat'), getRandomDelay(RESPONSE_DELAY_CONFIG.askQuantity)));
   }, [pendingCommand, isNearAgent, agentState, addLog, setPendingCommand, setAgentState]);
 
   // 处理数量回复
@@ -202,7 +352,7 @@ export function useGameLogic({
       // 关键修复：串联延迟，确保"没听清"在"需要砍几棵树？"之后1-2秒显示
       const firstDelay = getRandomDelay(RESPONSE_DELAY_CONFIG.askQuantity);
       const secondDelay = getRandomDelay(RESPONSE_DELAY_CONFIG.clarify);
-      setTimeout(() => addLog('德米特里: 没听清数量，请再说一次数字。', 'chat'), firstDelay + secondDelay);
+      registerTimeout(setTimeout(() => addLog('德米特里: 没听清数量，请再说一次数字。', 'chat'), firstDelay + secondDelay));
       return;
     }
     const qty = Math.max(ACTION_CONFIG.minChopQuantity, Math.min(ACTION_CONFIG.maxChopQuantity, parseInt(numMatch[0], 10)));
@@ -210,10 +360,10 @@ export function useGameLogic({
     
     // 随机延迟 NPC 确认回复
     const confirmDelay = getRandomDelay(RESPONSE_DELAY_CONFIG.confirm);
-    setTimeout(() => addLog(`德米特里: 好的，砍 ${qty} 棵。`, 'chat'), confirmDelay);
+    registerTimeout(setTimeout(() => addLog(`德米特里: 好的，砍 ${qty} 棵。`, 'chat'), confirmDelay));
     
     // NPC 说完话后再开始行动（额外等待 500-800ms）
-    setTimeout(() => {
+    registerTimeout(setTimeout(() => {
       // 寻找最近的树
       if (!agentRef.current) return;
       const aPos = agentRef.current.position;
@@ -244,46 +394,11 @@ export function useGameLogic({
       // 设置目标并进入 ACTING 状态
       setActionTarget({ x: nearestTree.position[0], z: nearestTree.position[2] });
       setAgentState('ACTING');
-    }, confirmDelay + getRandomDelay(RESPONSE_DELAY_CONFIG.actionStart)); // NPC 说完话后再开始行动
+    }, confirmDelay + getRandomDelay(RESPONSE_DELAY_CONFIG.actionStart))); // NPC 说完话后再开始行动
   }, [pendingCommand, addLog, setPendingCommand, setAgentState, resources, isNearAgent, leaderName]);
 
   // 砍树完成逻辑
   const onActionDone = () => {
-    // ========== HISMA P1: 进食完成逻辑 (Genesis V0.2) ==========
-    if (agentState === 'SEEKING_FOOD') {
-      // 到达储粮点，开始进食
-      let consumed = false;
-      let restoredAmount = 0;
-      
-      if (consumeResource('meat', 1)) {
-        restoredAmount = FOOD_TYPES.meat.restore;
-        consumed = true;
-        addLog(`系统：德米特里食用了${FOOD_TYPES.meat.icon}${FOOD_TYPES.meat.name}，恢复饱食度 +${restoredAmount}。`, 'system');
-      } else if (consumeResource('berry', 1)) {
-        restoredAmount = FOOD_TYPES.berry.restore;
-        consumed = true;
-        addLog(`系统：德米特里食用了${FOOD_TYPES.berry.icon}${FOOD_TYPES.berry.name}，恢复饱食度 +${restoredAmount}。`, 'system');
-      }
-      
-      if (consumed && dmitri) {
-        const newSatiety = Math.min(100, dmitri.stats.satiety + restoredAmount);
-        updateAgent('dmitri', {
-          stats: { ...dmitri.stats, satiety: newSatiety }
-        });
-        setAgentState('IDLE');
-        setActionTarget(null);
-      }
-      return;
-    }
-    
-    // ========== HISMA P1: 睡眠完成逻辑 (由 useSurvival 自动处理) ==========
-    // 当 energy >= 50 时，useSurvival 会自动将状态切换为 IDLE
-    if (agentState === 'SLEEPING') {
-      // 到达篝火，保持睡眠状态直到 useSurvival 唤醒
-      addLog('系统：德米特里在篝火旁沉沉睡去...', 'system');
-      return;
-    }
-    
     // ========== HISMA P3: 砍树完成逻辑 ==========
     // 完成一次砍树 - 标记树木为倒地状态，而非立即删除
     let treeId: number | null = null;
@@ -311,9 +426,9 @@ export function useGameLogic({
       clone[nearestIndex] = { ...clone[nearestIndex], state: 'falling' };
       
       // 2秒后删除树木（倒地动画完成后）
-      setTimeout(() => {
+      registerTimeout(setTimeout(() => {
         setResources((current) => current.filter((r) => r.id !== treeId));
-      }, RESOURCE_CONFIG.treeRemovalDelay);
+      }, RESOURCE_CONFIG.treeRemovalDelay));
       
       return clone;
     });
@@ -337,7 +452,7 @@ export function useGameLogic({
           chopQueueRef.current = 0;
           setActionTarget(null);
           // 延迟检查近场状态，因为此时可能玩家已经走远
-          setTimeout(() => {
+          registerTimeout(setTimeout(() => {
             if (!agentRef.current || !playerRef.current) {
               setAgentState('IDLE');
               return;
@@ -346,7 +461,7 @@ export function useGameLogic({
             const dz = playerRef.current.position.z - agentRef.current.position.z;
             const dist = Math.sqrt(dx * dx + dz * dz);
             setAgentState(dist < INTERACTION_CONFIG.interactionRange ? 'LISTENING' : 'IDLE');
-          }, INTERACTION_CONFIG.stateCheckDelay);
+          }, INTERACTION_CONFIG.stateCheckDelay));
           return currentResources;
         }
         
@@ -377,40 +492,6 @@ export function useGameLogic({
       addLog('系统：德米特里准备将木材送回储粮点。', 'system');
     }
   };
-
-  // ========== HISMA P3: 归库完成逻辑 (Genesis V0.2) ==========
-  useEffect(() => {
-    if (agentState !== 'DELIVERING') return;
-    if (!actionTarget) return;
-    
-    // 检查是否到达储粮点
-    if (!agentRef.current) return;
-    const aPos = agentRef.current.position;
-    const dx = aPos.x - actionTarget.x;
-    const dz = aPos.z - actionTarget.z;
-    const dist = Math.sqrt(dx * dx + dz * dz);
-    
-    if (dist < INTERACTION_CONFIG.arrivalThreshold) {
-      // 到达储粮点，添加木材到库存
-      addResource('wood', RESOURCE_CONFIG.woodPerTree);
-      addLog('系统：德米特里将木材送回储粮点，木材 +1。', 'system');
-      
-      // 清除目标，返回初始状态
-      setActionTarget(null);
-      
-      // 延迟检查近场状态
-      setTimeout(() => {
-        if (!agentRef.current || !playerRef.current) {
-          setAgentState('IDLE');
-          return;
-        }
-        const dx = playerRef.current.position.x - agentRef.current.position.x;
-        const dz = playerRef.current.position.z - agentRef.current.position.z;
-        const dist = Math.sqrt(dx * dx + dz * dz);
-        setAgentState(dist < INTERACTION_CONFIG.interactionRange ? 'LISTENING' : 'IDLE');
-      }, INTERACTION_CONFIG.stateCheckDelay);
-    }
-  }, [agentState, actionTarget, addResource, addLog, setAgentState]);
 
   return {
     actionTarget,

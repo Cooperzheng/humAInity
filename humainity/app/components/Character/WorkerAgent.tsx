@@ -42,12 +42,32 @@ const WorkerAgent = forwardRef<THREE.Group, WorkerAgentProps>(function WorkerAge
   const swingPhase = useRef(0);
   const isSwingingRef = useRef(false);
 
+  const relaxArms = () => {
+    const angle = 0;
+    if (leftArmRef.current && rightArmRef.current) {
+      leftArmRef.current.rotation.x = angle;
+      rightArmRef.current.rotation.x = -angle;
+    }
+  };
+
+  const getStatusIcon = (): string => {
+    // 新增核心状态图标（Step 3 UI 对接需要稳定输出）
+    if (agentState === 'DELIVERING') return '📦 ';
+    if (agentState === 'SEEKING_FOOD') return '🏃‍♀️ ';
+    if (agentState === 'EATING') return '🍖 ';
+    if (agentState === 'EXHAUSTED') return '😩 ';
+    if (agentState === 'SLEEPING') return '💤 ';
+
+    // 旧状态（保留）
+    if (agentState === 'ACTING') return '🪓 ';
+    if (agentState === 'THINKING') return '⚙️ ';
+    if (agentState === 'LISTENING' && isNearAgent) return '👂 ';
+    return '';
+  };
+
   useFrame((state, delta) => {
     if (!groupRef.current) return;
     const me = groupRef.current;
-
-    // 若处于 THINKING/ACTING/LISTENING，停止随机游走
-    const active = agentState === 'THINKING' || agentState === 'ACTING' || agentState === 'LISTENING';
 
     // 行为：ACTING 时移动到目标并挥动
     if (agentState === 'ACTING' && actionTarget) {
@@ -96,13 +116,27 @@ const WorkerAgent = forwardRef<THREE.Group, WorkerAgentProps>(function WorkerAge
       return;
     }
 
-    // LISTENING：朝向玩家，停留不走
-    if (agentState === 'LISTENING' && playerRef.current) {
-      const p = playerRef.current.position;
-      const dx = p.x - me.position.x;
-      const dz = p.z - me.position.z;
-      me.rotation.y = Math.atan2(dx, dz);
-      const angle = 0; // 手臂放松
+    // 行为：SEEKING_FOOD / DELIVERING / SLEEPING 朝 actionTarget 移动（到达后驻留）
+    if (
+      actionTarget &&
+      (agentState === 'SEEKING_FOOD' || agentState === 'DELIVERING' || agentState === 'SLEEPING')
+    ) {
+      const dx = actionTarget.x - me.position.x;
+      const dz = actionTarget.z - me.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+
+      let moving = false;
+      if (dist > INTERACTION_CONFIG.arrivalThreshold) {
+        moving = true;
+        me.position.x += (dx / dist) * moveSpeedRef.current;
+        me.position.z += (dz / dist) * moveSpeedRef.current;
+      }
+
+      // 手臂摆动（行走）
+      const targetSpeed = moving ? MOVEMENT_CONFIG.walkSwingSpeed : 0;
+      swingPhase.current += delta * targetSpeed;
+      const amp = moving ? MOVEMENT_CONFIG.walkSwingAmplitude : 0;
+      const angle = Math.sin(swingPhase.current) * amp;
       if (leftArmRef.current && rightArmRef.current) {
         leftArmRef.current.rotation.x = angle;
         rightArmRef.current.rotation.x = -angle;
@@ -110,13 +144,25 @@ const WorkerAgent = forwardRef<THREE.Group, WorkerAgentProps>(function WorkerAge
       return;
     }
 
+    // EATING / EXHAUSTED / STARVING：不游走（驻留/静止）
+    if (agentState === 'EATING' || agentState === 'EXHAUSTED' || agentState === 'STARVING' || agentState === 'SLEEPING') {
+      relaxArms();
+      return;
+    }
+
+    // LISTENING：朝向玩家，停留不走
+    if (agentState === 'LISTENING' && playerRef.current) {
+      const p = playerRef.current.position;
+      const dx = p.x - me.position.x;
+      const dz = p.z - me.position.z;
+      me.rotation.y = Math.atan2(dx, dz);
+      relaxArms();
+      return;
+    }
+
     // THINKING：不移动，手臂放松
     if (agentState === 'THINKING') {
-      const angle = 0;
-      if (leftArmRef.current && rightArmRef.current) {
-        leftArmRef.current.rotation.x = angle;
-        rightArmRef.current.rotation.x = -angle;
-      }
+      relaxArms();
       return;
     }
 
@@ -126,15 +172,15 @@ const WorkerAgent = forwardRef<THREE.Group, WorkerAgentProps>(function WorkerAge
       const dx = p.x - me.position.x;
       const dz = p.z - me.position.z;
       me.rotation.y = Math.atan2(dx, dz);
-      const angle = 0; // 手臂放松
-      if (leftArmRef.current && rightArmRef.current) {
-        leftArmRef.current.rotation.x = angle;
-        rightArmRef.current.rotation.x = -angle;
-      }
+      relaxArms();
       return;
     }
 
     // IDLE: 随机漫步
+    if (agentState !== 'IDLE') {
+      relaxArms();
+      return;
+    }
     timerRef.current += delta;
     if (timerRef.current > getWanderInterval()) {
       timerRef.current = 0;
@@ -214,7 +260,7 @@ const WorkerAgent = forwardRef<THREE.Group, WorkerAgentProps>(function WorkerAge
           whiteSpace: 'nowrap',
           pointerEvents: 'none'
         }}>
-          {isNearAgent && agentState === 'LISTENING' ? '👂 ' : agentState === 'THINKING' ? '⚙️ ' : agentState === 'ACTING' ? '🪓 ' : ''}德米特里
+          {getStatusIcon()}德米特里
         </div>
       </Html>
     </group>
