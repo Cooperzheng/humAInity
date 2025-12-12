@@ -120,6 +120,20 @@ const WorkerAgent = forwardRef<THREE.Group, WorkerAgentProps>(function WorkerAge
       return;
     }
 
+    // ASKING：询问时朝向玩家，停留不走
+    if (agentState === 'ASKING' && playerRef.current) {
+      const p = playerRef.current.position;
+      const dx = p.x - me.position.x;
+      const dz = p.z - me.position.z;
+      me.rotation.y = Math.atan2(dx, dz);
+      const angle = 0; // 手臂放松
+      if (leftArmRef.current && rightArmRef.current) {
+        leftArmRef.current.rotation.x = angle;
+        rightArmRef.current.rotation.x = -angle;
+      }
+      return;
+    }
+
     // IDLE: 随机漫步
     timerRef.current += delta;
     if (timerRef.current > getWanderInterval()) {

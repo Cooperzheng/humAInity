@@ -6,7 +6,7 @@ import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useGameState } from '../Game/GameState';
 import { useWASDControls } from '../../hooks/useWASDControls';
-import { WORLD_CONFIG, MOVEMENT_CONFIG } from '../../config/GameConfig';
+import { MOVEMENT_CONFIG, getMapBoundary } from '../../config/GameConfig';
 
 // PlayerLeader component - 玩家化身
 interface PlayerLeaderProps {
@@ -65,8 +65,9 @@ const PlayerLeader = forwardRef<THREE.Group, PlayerLeaderProps>(function PlayerL
       groupRef.current.position.add(moveVector);
       
       // 边界限制（保持在地图内）
-      groupRef.current.position.x = Math.max(-WORLD_CONFIG.mapBoundary, Math.min(WORLD_CONFIG.mapBoundary, groupRef.current.position.x));
-      groupRef.current.position.z = Math.max(-WORLD_CONFIG.mapBoundary, Math.min(WORLD_CONFIG.mapBoundary, groupRef.current.position.z));
+      const mapBoundary = getMapBoundary(); // 自动计算边界 (38米)
+      groupRef.current.position.x = Math.max(-mapBoundary, Math.min(mapBoundary, groupRef.current.position.x));
+      groupRef.current.position.z = Math.max(-mapBoundary, Math.min(mapBoundary, groupRef.current.position.z));
 
       // 手臂摆动：仅在移动时摆动，幅度随速度
       const moving = moveLength > MOVEMENT_CONFIG.movementThreshold;
@@ -82,7 +83,7 @@ const PlayerLeader = forwardRef<THREE.Group, PlayerLeaderProps>(function PlayerL
   });
 
   return (
-    <group ref={groupRef} position={[0, 0, 0]}>
+    <group ref={groupRef} position={[3, 0, 0]}>
       {/* 身体 - 胶囊体（用圆柱体代替） */}
       <mesh position={[0, 0.25, 0]} castShadow>
         <capsuleGeometry args={[0.22, 0.5, 4, 8]} />

@@ -3,29 +3,58 @@
 import { useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, OrthographicCamera } from '@react-three/drei';
-import { Ground, Mountain, Water } from '../World/Environment';
+import { Ground, Mountain, Water, ZoneBoundaries, Bonfire, Granary } from '../World/Environment';
 import ResourceTile, { ResourceType } from '../World/ResourceTile';
 import PlayerLeader from '../Character/PlayerLeader';
 import WorkerAgent from '../Character/WorkerAgent';
 import GameUI from './GameUI';
+import DebugPanel from '../Debug/DebugPanel';
 import { useGameState } from './GameState';
 import { useGameLogic, Resource } from '../../hooks/useGameLogic';
-import { WORLD_CONFIG, RESOURCE_CONFIG, CAMERA_CONFIG } from '../../config/GameConfig';
+import { useSurvival } from '../../hooks/useSurvival';
+import { WORLD_CONFIG, RESOURCE_CONFIG, CAMERA_CONFIG, FACILITIES, getSettlementRadius, getResourceRadius } from '../../config/GameConfig';
 
 // GameSceneInner - 包含 Three.js 对象
 function GameSceneInner({ leaderName }: { leaderName: string }) {
   const playerRef = useRef<THREE.Group>(null);
   const agentRef = useRef<THREE.Group>(null);
-  const { agentState, isNearAgent } = useGameState();
+  const { isNearAgent, agents } = useGameState();
+  
+  // Genesis V0.2: 从 agents 字典获取 dmitri 的状态
+  const agentState = agents['dmitri']?.state || 'IDLE';
+  
+  // Genesis V0.2: 启动生存系统心跳
+  useSurvival();
 
+  // Genesis V0.2: 资源生成规则 - 排除聚落核心区
   const [resources, setResources] = useState<Resource[]>(() => {
     const arr: Resource[] = [];
-    for (let i = 0; i < RESOURCE_CONFIG.initialResourceCount; i++) {
-      const x = (Math.random() - 0.5) * WORLD_CONFIG.coreArea;
-      const z = (Math.random() - 0.5) * WORLD_CONFIG.coreArea;
+    const settlementRadius = getSettlementRadius();
+    const resourceRadius = getResourceRadius();
+    let attempts = 0;
+    const maxAttempts = RESOURCE_CONFIG.initialResourceCount * 10; // 防止死循环
+    
+    for (let i = 0; i < RESOURCE_CONFIG.initialResourceCount && attempts < maxAttempts; attempts++) {
+      const x = (Math.random() - 0.5) * WORLD_CONFIG.resourceDiameter;
+      const z = (Math.random() - 0.5) * WORLD_CONFIG.resourceDiameter;
+      const distFromCenter = Math.sqrt(x * x + z * z);
+      
+      // 跳过聚落核心区（直径 30米，半径 15 米内）
+      if (distFromCenter < settlementRadius) {
+        continue;
+      }
+      
+      // 跳过资源区外的位置（半径 30 米外）
+      if (distFromCenter > resourceRadius) {
+        continue;
+      }
+      
       const type: ResourceType = Math.random() > (1 - RESOURCE_CONFIG.treeSpawnProbability) ? 'tree' : 'stone';
       arr.push({ id: Date.now() + i, type, position: [x, 0, z] });
+      i++; // 只有成功生成资源时才增加计数
     }
+    
+    console.log(`[GameScene] Generated ${arr.length} resources outside settlement zone (D=${WORLD_CONFIG.settlementDiameter}, R=${settlementRadius})`);
     return arr;
   });
 
@@ -70,6 +99,13 @@ function GameSceneInner({ leaderName }: { leaderName: string }) {
       
       {/* 地面占位符 */}
       <Ground />
+      
+      {/* === Genesis V0.2: 世界区域可视化 === */}
+      <ZoneBoundaries />
+      
+      {/* === Genesis V0.2: 设施 === */}
+      <Bonfire position={FACILITIES.bonfire} />
+      <Granary position={FACILITIES.granary} />
       
       {/* === 地貌生成（外围世界）=== */}
       <Mountain position={[32, 0, 32]} />
@@ -162,6 +198,7 @@ export default function GameScene({ leaderName }: GameSceneProps) {
         <GameSceneInner leaderName={leaderName} />
       </Canvas>
       <GameUI leaderName={leaderName} />
+      <DebugPanel />
     </div>
   );
 }

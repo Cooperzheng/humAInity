@@ -10,7 +10,7 @@ describe('砍树流程集成测试', () => {
       result.current.logs.length = 0;
       result.current.wood = 0;
       result.current.isNearAgent = false;
-      result.current.agentState = 'IDLE';
+      result.current.updateAgent('dmitri', { state: 'IDLE' });
       result.current.pendingCommand = null;
     });
   });
@@ -21,10 +21,10 @@ describe('砍树流程集成测试', () => {
     // 1. 玩家接近 NPC
     act(() => {
       result.current.setNearAgent(true);
-      result.current.setAgentState('LISTENING');
+      result.current.updateAgent('dmitri', { state: 'LISTENING' });
     });
     expect(result.current.isNearAgent).toBe(true);
-    expect(result.current.agentState).toBe('LISTENING');
+    expect(result.current.agents['dmitri'].state).toBe('LISTENING');
 
     // 2. 玩家发送"砍树"指令
     act(() => {
@@ -38,11 +38,11 @@ describe('砍树流程集成测试', () => {
 
     // 3. NPC 询问数量（模拟游戏逻辑）
     act(() => {
-      result.current.setAgentState('ASKING');
+      result.current.updateAgent('dmitri', { state: 'ASKING' });
       result.current.addLog('德米特里: 需要砍几棵树？', 'chat');
       result.current.setPendingCommand(null);
     });
-    expect(result.current.agentState).toBe('ASKING');
+    expect(result.current.agents['dmitri'].state).toBe('ASKING');
     expect(result.current.logs).toContainEqual(
       expect.objectContaining({ text: '德米特里: 需要砍几棵树？', type: 'chat' })
     );
@@ -62,10 +62,10 @@ describe('砍树流程集成测试', () => {
     // 6. NPC 确认并开始执行
     act(() => {
       result.current.addLog('德米特里: 好的，砍 3 棵。', 'chat');
-      result.current.setAgentState('ACTING');
+      result.current.updateAgent('dmitri', { state: 'ACTING' });
       result.current.setPendingCommand(null);
     });
-    expect(result.current.agentState).toBe('ACTING');
+    expect(result.current.agents['dmitri'].state).toBe('ACTING');
 
     // 7. 模拟砍树完成
     act(() => {

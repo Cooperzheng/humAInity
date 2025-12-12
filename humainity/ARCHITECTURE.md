@@ -235,10 +235,20 @@ const placeholder = isNearAgent ? '与德米特里交谈...' : '输入消息...'
   - **单元测试**：
     - `GameState.test.ts`：验证资源累加、日志记录等状态管理逻辑。
     - `GameUI.test.tsx`：验证 UI 组件基本行为（近场占位提示、发送消息等）。
+    - `EarIcon.test.tsx`：验证图标组件渲染。
   - **集成测试**：
-    - `ChopTreeFlow.test.ts`：完整的砍树指令流程测试，包括状态变化、指令解析、资源更新。
+    - `ChopTreeFlow.test.ts`：状态层砍树流程测试，包括状态变化、指令解析、资源更新。
     - `ChatDisplay.test.tsx`：对话显示逻辑测试，验证消息过滤、聚焦/非聚焦显示、玩家消息立即显示等。
-- 编写约定：新增/修改功能时，同步补充或更新对应模块测试；如牵涉 3D 交互，优先在状态与纯逻辑层（store/纯函数）添加覆盖，再视需要对 UI 进行行为测试。
+    - `ChatHistoryAutoHide.test.tsx`：对话历史自动隐藏机制测试。
+    - `ChatInputDisplay.test.tsx`：输入框显示和消息发送测试。
+    - `InputFocusRecovery.test.tsx`：输入焦点管理测试。
+  - **端到端集成测试** (Genesis V0.2 新增)：
+    - `ChopTreeIntegration.test.tsx`：**关键测试**，覆盖从玩家输入到 WorkerAgent 实际执行的完整数据流。
+      - 测试 `useGameLogic → GameScene → WorkerAgent` 的状态传递链
+      - 使用捕获式 Mock（保留 useFrame 执行能力）
+      - 能够发现状态读取/传递错误（如 GameScene 从错误位置读取状态）
+      - 测试用例：完整砍树流程、状态传递链、边界情况、回归测试、状态隔离、updateAgent 操作
+- 编写约定：新增/修改功能时，同步补充或更新对应模块测试；如牵涉 3D 交互，优先在状态与纯逻辑层（store/纯函数）添加覆盖，再视需要对 UI 进行行为测试。**重大重构后必须添加端到端测试验证主干流程**。
 
 ## 关键实现细节
 
@@ -1267,11 +1277,12 @@ PlayerLeader/WorkerAgent (通过 forwardRef 暴露 THREE.Group)
 创建 `app/config/GameConfig.ts`，按功能模块组织配置：
 
 - **WORLD_CONFIG**: 世界与地图配置
-  - mapSize: 80 (米) - 地图大小
-  - mapBoundary: 38 (米) - 地图边界 (±38)
+  - mapSize: 80 (米) - 地图大小（80×80的正方形地面）
   - groundThickness: 1 (米) - 地面厚度
   - groundDepth: -0.5 (米) - 地面Y位置
-  - coreArea: 20 (米) - 核心区大小（资源生成范围）
+  - settlementDiameter: 30 (米) - 聚落区直径（青色圈，无资源生成）
+  - resourceDiameter: 60 (米) - 资源区直径（橙色圈，资源生成范围）
+  - 派生函数: getMapBoundary() 返回 38 (米) - 自动计算玩家可移动边界
 
 - **RESOURCE_CONFIG**: 资源生成与管理配置
   - initialResourceCount: 60 - 初始资源数量
@@ -1367,8 +1378,14 @@ export const INTERACTION_CONFIG = {
 } as const;
 
 export const WORLD_CONFIG = {
-  mapBoundary: 38,  // 地图边界 (米, ±38)
+  mapSize: 80,               // 地图边长 (米，80×80的正方形地面)
+  settlementDiameter: 30,    // 聚落区直径 (米) - 青色圈
+  resourceDiameter: 60,      // 资源区直径 (米) - 橙色圈
 } as const;
+
+// 派生值计算函数
+export const getMapBoundary = () => WORLD_CONFIG.mapSize / 2 - 2;  // 38米
+export const getSettlementRadius = () => WORLD_CONFIG.settlementDiameter / 2;  // 15米
 
 export const MOVEMENT_CONFIG = {
   npcSpeed: 0.01,  // NPC移动速度 (米/帧)
@@ -1376,7 +1393,8 @@ export const MOVEMENT_CONFIG = {
 
 // 使用处
 const near = dist < INTERACTION_CONFIG.interactionRange;
-groupRef.current.position.x = Math.max(-WORLD_CONFIG.mapBoundary, ...);
+const mapBoundary = getMapBoundary();  // 自动计算边界
+groupRef.current.position.x = Math.max(-mapBoundary, ...);
 const moveSpeedRef = useRef(MOVEMENT_CONFIG.npcSpeed);
 ```
 
@@ -1431,9 +1449,9 @@ export const DIFFICULTY_PRESETS = {
 **地图大小配置（未来扩展）**：
 ```typescript
 export const MAP_SIZE_PRESETS = {
-  small: { mapSize: 50, coreArea: 15, resourceCount: 30 },
-  medium: { mapSize: 80, coreArea: 20, resourceCount: 60 },
-  large: { mapSize: 120, coreArea: 30, resourceCount: 100 },
+  small: { mapSize: 50, settlementDiameter: 20, resourceDiameter: 40, resourceCount: 30 },
+  medium: { mapSize: 80, settlementDiameter: 30, resourceDiameter: 60, resourceCount: 60 },
+  large: { mapSize: 120, settlementDiameter: 40, resourceDiameter: 80, resourceCount: 100 },
 } as const;
 ```
 
@@ -1450,6 +1468,509 @@ export const MAP_SIZE_PRESETS = {
 
 **总替换数**：100+ 处硬编码数值
 
+## Genesis V0.2 数据层重构 (2025-12-11)
+
+### 重构目标
+
+将项目从"单指令验证"升级为"多智能体生存模拟"系统。这是底层数据结构的彻底改造，为后续实现 HISMA 状态机和生存系统奠定基础。
+
+### 核心理念
+
+**数值驱动肉体，AI 驱动灵魂**
+
+智能体不再是简单的指令执行者，而是拥有生存压力、自主分工与复杂心理的生命体。
+
+### 架构设计：HISMA
+
+**Hierarchical Interaction-Survival-Mission Architecture** (三层优先级状态机)
+
+采用**强抢占式逻辑**，高优先级状态会强制打断低优先级状态：
+
+#### P1: 生存本能 (Survival) - 最高优先级 🔴
+- **状态**：STARVING, SEEKING_FOOD, EATING, SLEEPING, EXHAUSTED
+- **触发条件**：
+  - `satiety < 20` → STARVING（饥饿）
+  - `energy < 10` → EXHAUSTED（力竭）
+- **行为特征**：
+  - 寻粮逻辑：检查公共库存 → 移动至储粮点 → 消耗库存恢复饱食
+  - 拒绝机制：此层级激活时，**强制拒绝**玩家交互
+
+#### P2: 社会交互 (Social) - 中优先级 🟡
+- **状态**：LISTENING, THINKING, ASKING, CHATTING, PONDERING
+- **触发条件**：玩家在交互范围内且 P1 未激活
+- **行为特征**：
+  - 暂停 P3 工作，转向玩家
+  - 允许接收新愿景/指令
+
+#### P3: 日常使命 (Mission) - 最低优先级 🟢
+- **状态**：IDLE, MOVING, WORKING, DELIVERING
+- **触发条件**：P1 & P2 未激活
+- **行为特征**：
+  - 执行由 `currentAssignment` 定义的循环逻辑
+  - DELIVERING：资源满载后运回储粮点
+
+### AgentProfile 双核模型
+
+#### 肉体 (The Vessel) - 机械锚点
+```typescript
+stats: {
+  satiety: number;  // 饱食度 (0-100，影响健康，<20 触发饥饿)
+  energy: number;   // 精力值 (0-100，影响效率，<10 触发力竭)
+  health: number;   // 健康度 (0-100，归零死亡)
+}
+capTraits: string[];  // 能力特质，e.g., ['Strong', 'QuickWalker']
+```
+
+#### 灵魂 (The Soul) - 叙事锚点
+```typescript
+psychTraits: string[];        // 心理特质，e.g., ['Pessimistic', 'Loyal']
+thoughtHistory: Array<{       // 心路历程（核心叙事资产）
+  tick: number;               // 游戏时刻
+  content: string;            // LLM 生成的独白
+  trigger: string;            // 触发原因
+  mood?: string;              // 当时情绪
+}>;
+shortTermMemory: string[];    // 短期记忆（事实日志）
+```
+
+### 数据结构迁移
+
+#### 旧架构 (v0.1)
+```typescript
+// 单一全局状态
+type GameStore = {
+  agentState: AgentState;        // 只能管理一个 NPC
+  setAgentState: (s: AgentState) => void;
+  // ...
+};
+```
+
+#### 新架构 (v0.2)
+```typescript
+type GameStore = {
+  // 多智能体字典
+  agents: Record<string, AgentProfile>;  // 支持多个 NPC 并行
+  selectedAgentId: string | null;        // 当前选中的 NPC（用于 UI）
+  
+  // 新增操作
+  updateAgent: (id: string, updates: Partial<AgentProfile>) => void;
+  selectAgent: (id: string) => void;
+  deselectAgent: () => void;
+  // ...
+};
+```
+
+### 配置扩展
+
+#### NPC_CONFIG (新增生存数值参数)
+```typescript
+export const NPC_CONFIG = {
+  // ... 原有参数
+  
+  // 生存数值配置 (Genesis V0.2)
+  maxSatiety: 100,                // 最大饱食度
+  maxEnergy: 100,                 // 最大精力值
+  maxHealth: 100,                 // 最大健康度
+  hungerRate: 0.1,                // 每秒饱食度消耗
+  energyDecayRate: 0.2,           // 工作时每秒精力消耗
+  energyRecoverRate: 5.0,         // 睡觉时每秒精力恢复
+  starveThreshold: 20,            // 饥饿阈值（触发STARVING）
+  exhaustThreshold: 10,           // 力竭阈值（触发EXHAUSTED）
+} as const;
+```
+
+#### STORAGE_CONFIG (新增公共储粮点配置)
+```typescript
+export const STORAGE_CONFIG = {
+  position: [5, 0, 5] as const,   // 储粮点位置 [x, y, z]
+  interactionRadius: 2,            // 交互半径 (米)
+} as const;
+```
+
+### 类型系统重构
+
+#### 新建文件
+- **`app/types/Agent.ts`** - 核心类型定义
+  - `AgentState` (扩展版，15 个状态)
+  - `AgentProfile` (双核模型接口)
+  - `AgentAction` (未来扩展)
+
+#### 修改文件
+- **`app/config/GameConfig.ts`** - 扩展配置
+  - 新增 NPC_CONFIG 生存参数（8 项）
+  - 新增 STORAGE_CONFIG（2 项）
+
+- **`app/components/Game/GameState.ts`** - 状态重构
+  - 引入 `agents: Record<string, AgentProfile>`
+  - 初始化默认智能体 `'dmitri'`
+  - 新增 `updateAgent`, `selectAgent`, `deselectAgent` 操作
+  - 添加兼容层 `useAgentState`, `useSetAgentState`（临时）
+
+### 兼容性处理
+
+为了不破坏现有功能，采用**渐进式迁移**策略：
+
+#### 兼容 Helper（临时）
+```typescript
+// GameState.ts
+export const useAgentState = () => {
+  const dmitriState = useGameState((s) => s.agents['dmitri']?.state || 'IDLE');
+  return dmitriState;
+};
+
+export const useSetAgentState = () => {
+  const updateAgent = useGameState((s) => s.updateAgent);
+  return (state: AgentState) => updateAgent('dmitri', { state });
+};
+```
+
+#### 现有代码迁移
+- **GameUI.tsx**：从 `agents['dmitri']` 读取状态
+- **useGameLogic.ts**：使用 `updateAgent` 更新状态
+- **WorkerAgent.tsx**：保持原有接口，通过 props 接收状态
+
+### 实现路径
+
+本次重构（**Step 1: 数据层**）已完成：
+- ✅ 配置层扩展（GameConfig.ts）
+- ✅ 类型层定义（Agent.ts）
+- ✅ 状态层重构（GameState.ts）
+- ✅ 兼容层实现（useAgentState, useSetAgentState）
+
+后续任务：
+- **Step 2 (逻辑层)**：实现 `useSurvival` Hook（生存数值衰减）、HISMA 状态仲裁逻辑
+- **Step 3 (UI层)**：实现储粮点可视模型、灵魂透视镜面板（SoulInspector）
+- **Step 4 (迁移)**：移除兼容层，全面迁移到新 agents 系统
+
+### 测试策略
+
+本次重构为**纯数据定义**，现有测试（40+ tests）应保持通过，因为：
+- 未修改现有组件的行为逻辑
+- 添加了兼容层支持旧代码
+- 新的 agents 系统暂未被使用
+
+**验证方式**：手动运行 `npm test`（在 `F:\Coding\humAInity\humainity` 目录）
+
+### Bug 修复与测试改进 (2025-12-11)
+
+**Bug**: GameScene 未正确从 agents 字典读取状态
+
+**现象**：
+- 德米特里对话正常，确认砍树任务
+- 但完全不执行砍树动作（不移动、不挥动）
+- 右上角系统日志显示"接受任务"，但无后续动作
+
+**根本原因**：
+- `GameScene.tsx` 第 19 行尝试解构不存在的 `agentState` 字段
+- 重构后状态存储在 `agents['dmitri'].state`，但 GameScene 仍用旧 API
+- 导致传递给 `WorkerAgent` 的 `agentState` 是 `undefined`
+- `WorkerAgent` 的条件 `agentState === 'ACTING' && actionTarget` 永远不满足
+
+**修复**：
+```typescript
+// 修复前 ❌
+const { agentState, isNearAgent } = useGameState();
+
+// 修复后 ✅
+const { isNearAgent, agents } = useGameState();
+const agentState = agents['dmitri']?.state || 'IDLE';
+```
+
+**为什么测试没发现**：
+1. **ChopTreeFlow.test.ts** - 只测试状态管理层，跳过了 GameScene 的状态读取
+2. **InputFocusRecovery.test.tsx** - Mock 了 useFrame，WorkerAgent 逻辑不执行
+3. **缺少端到端测试** - 没有测试完整的组件集成和数据流
+
+**测试改进**：
+- 新增 `ChopTreeIntegration.test.tsx`（8 个测试用例）
+- 使用**捕获式 Mock**：保留 useFrame 执行能力，可手动触发
+- 测试覆盖：
+  - 完整砍树流程（端到端）
+  - 状态传递链验证（GameScene → WorkerAgent）
+  - 边界情况（空 agents 字典）
+  - 回归测试（确保使用 agents 字典）
+  - 状态隔离（多 agent 独立管理）
+  - updateAgent 部分更新
+  - selectAgent/deselectAgent 操作
+
+**教训**：
+- 数据结构重构后必须添加端到端测试
+- 单元测试 + 集成测试 + 端到端测试 = 完整覆盖
+- Mock 要适度，关键执行路径不能 Mock 掉
+
+### Bug 修复：任务完成后的状态异常 (2025-12-11 晚)
+
+**Bug 描述**：
+- 第一次砍树流程正常，但完成后出现问题：
+  1. 在德米特里旁边时，对话框显示在对话，但德米特里仍在移动（ASKING 状态下游荡）
+  2. 再次说"砍树"时，显示"距离太远"，德米特里不执行任务
+
+**根本原因**：
+1. **WorkerAgent 缺少 ASKING 状态处理**：
+   - `WorkerAgent.tsx` 的 useFrame 中，ASKING 状态没有专门的分支
+   - 导致代码跳过前面的 if，直接执行 IDLE 的游荡逻辑
+   - NPC 在询问玩家时仍在移动
+
+2. **状态切换逻辑依赖过时的 ref**：
+   - `useGameLogic.ts` 的 useFrame 使用 `lastAgentStateRef` 来避免重复更新
+   - 但 `onActionDone` 的 setTimeout 调用 `setAgentState` 时，ref 未同步
+   - 导致 useFrame 认为状态已经是目标状态，跳过切换
+   - IDLE → LISTENING 的自动切换失效
+
+**修复方案**：
+
+1. **为 ASKING 状态添加专门处理** (`WorkerAgent.tsx`):
+```typescript
+// ASKING：询问时朝向玩家，停留不走
+if (agentState === 'ASKING' && playerRef.current) {
+  const p = playerRef.current.position;
+  const dx = p.x - me.position.x;
+  const dz = p.z - me.position.z;
+  me.rotation.y = Math.atan2(dx, dz);
+  const angle = 0; // 手臂放松
+  if (leftArmRef.current && rightArmRef.current) {
+    leftArmRef.current.rotation.x = angle;
+    rightArmRef.current.rotation.x = -angle;
+  }
+  return;
+}
+```
+
+2. **简化状态切换逻辑，直接基于 agentState** (`useGameLogic.ts`):
+```typescript
+// 修复前 ❌ - 依赖 lastAgentStateRef
+if (newState && newState !== lastAgentStateRef.current) {
+  lastAgentStateRef.current = newState;
+  setAgentState(newState);
+}
+
+// 修复后 ✅ - 直接基于当前 agentState
+if (near && agentState !== 'LISTENING') {
+  setAgentState('LISTENING');
+} else if (!near && agentState !== 'IDLE') {
+  setAgentState('IDLE');
+}
+```
+
+**验证结果**：
+- ✅ ASKING 状态下，NPC 停止移动并面向玩家
+- ✅ 任务完成后，玩家走近时自动从 IDLE → LISTENING
+- ✅ 多次砍树流程全部正常
+- ✅ 状态切换流畅，无残留状态问题
+
+**教训**：
+- 状态机的每个状态都必须有明确的行为定义
+- 避免使用 ref 缓存状态进行判断，直接基于当前状态更可靠
+- ASKING、LISTENING 等社交状态应该停止移动逻辑
+
+### React setState 报错修复 (2025-12-11 晚)
+
+**问题**：
+- useFrame 中直接调用 setAgentState 导致 React 报错
+- 错误信息：`Cannot update a component (ForwardRef(PlayerLeader)) while rendering a different component (GameSceneInner)`
+
+**原因**：
+- useFrame 在渲染期间执行，不能直接调用 setState
+- 违反了 React 的规则：渲染必须是纯函数，不能有副作用
+
+**修复方案** (`useGameLogic.ts`):
+```typescript
+// 添加 ref 缓存待更新的状态
+const pendingStateUpdateRef = useRef<AgentState | null>(null);
+
+// useFrame 中只设置 ref，不调用 setState
+useFrame(() => {
+  // ... 距离检测逻辑 ...
+  if (near && agentState !== 'LISTENING') {
+    pendingStateUpdateRef.current = 'LISTENING';  // ✅ 只设置 ref
+  } else if (!near && agentState !== 'IDLE') {
+    pendingStateUpdateRef.current = 'IDLE';
+  }
+});
+
+// useEffect 在渲染完成后安全地应用状态更新
+useEffect(() => {
+  if (pendingStateUpdateRef.current) {
+    const newState = pendingStateUpdateRef.current;
+    pendingStateUpdateRef.current = null;
+    setAgentState(newState);  // ✅ 在 useEffect 中调用 setState
+  }
+});
+```
+
+**为什么有效**：
+- useFrame 在渲染期间执行，只设置 ref（不触发渲染）
+- useEffect 在渲染完成后执行，安全地调用 setState
+- React 会在下一帧应用状态更新，避免渲染冲突
+
+**测试增强**：
+
+1. **状态层测试** (`ChopTreeIntegration.test.tsx` 新增 3 个):
+   - ASKING 状态稳定性：验证 ASKING 状态不会被 IDLE 逻辑干扰
+   - IDLE → LISTENING 自动切换：验证任务完成后的状态切换
+   - 完整多次砍树循环：回归测试，验证多次任务循环正常
+
+2. **useFrame 行为测试** (`UseFrameStateBehavior.test.ts` 新建，6 个测试):
+   - 状态更新延迟机制：验证状态不在同步帧内更新
+   - 状态防抖：验证快速距离变化不导致状态抖动
+   - 特殊状态保护：验证 ASKING、ACTING、THINKING 不受距离影响
+   - inputFocused 保护：验证输入时不自动切换状态
+   - 完整生命周期：验证 IDLE → LISTENING → ASKING → ACTING → IDLE 循环
+
+**测试覆盖**：
+- 测试总数：75 → 84 个（新增 9 个）
+- 覆盖场景：状态切换时机、防抖机制、状态保护、生命周期
+
+**验证结果**：
+- ✅ 浏览器控制台不再出现 React 报错
+- ✅ 游戏功能正常（ASKING 不移动、IDLE 自动切换）
+- ✅ 所有 84 个测试通过
+
+### 关键文件变更
+
+**新建文件（1 个）**：
+- `humainity/app/types/Agent.ts` (约 160 行)
+
+**修改文件（3 个）**：
+- `humainity/app/config/GameConfig.ts` (+10 行生存配置)
+- `humainity/app/components/Game/GameState.ts` (重构约 80 行)
+- `humainity/app/hooks/useGameLogic.ts` (兼容层调用)
+- `humainity/app/components/Game/GameUI.tsx` (兼容层调用)
+
+**总计**：新增约 200 行，修改约 50 行
+
+### 设计原则
+
+- **数据驱动**：所有生存参数集中在 GameConfig.ts
+- **类型安全**：TypeScript 严格类型约束，避免运行时错误
+- **向后兼容**：兼容层确保现有代码正常运行
+- **渐进式迁移**：分步骤完成，每步都可验证
+- **文档先行**：先设计架构，再实现代码
+
+## Genesis V0.2 Step 2: 生存系统与世界规则升级 (2025-12-11)
+
+### 升级目标
+
+在 Step 1 数据层基础上，实现完整的 HISMA 生存系统、多食物资源管理、世界区域规则和 GM 调试工具。
+
+### 核心系统架构
+
+#### 1. 多资源库存系统
+
+**资源类型扩展**：
+- 旧架构：`wood: number`, `food: number`
+- 新架构：`inventory: { wood, berry, meat }`
+
+**食物类型配置** (`GameConfig.ts`):
+- `FOOD_TYPES`: berry (+10 饱食度), meat (+30 饱食度)
+- `INITIAL_RESOURCES`: { wood: 0, berry: 50, meat: 0 } (启动资金)
+
+**资源操作 API**：
+- `addResource(type, amount)` - 添加资源到库存
+- `consumeResource(type, amount)` - 消耗资源（返回 boolean）
+- `modifyAllAgents(modifier)` - GM 工具批量修改
+
+#### 2. 生存系统心跳 (useSurvival.ts)
+
+**核心职责**：每秒遍历所有智能体，计算生存数值衰减，检测阈值触发 P1 状态。
+
+**消耗率配置** (`SURVIVAL_RATES`):
+- hungerIdle: 0.1，hungerWork: 0.3（每秒饱食度消耗）
+- energyIdle: 0.05，energyWork: 0.2（每秒精力消耗）
+- recoverySleep: 5.0（睡眠时每秒精力恢复）
+- starveThreshold: 20，exhaustThreshold: 10（触发阈值）
+
+**关键逻辑**：
+- 工作状态消耗更快（WORKING, DELIVERING, MOVING, ACTING）
+- 睡眠时恢复精力（energy += 5.0/秒）
+- 阈值检测：satiety < 20 → STARVING, energy < 10 → EXHAUSTED
+- 自动唤醒：SLEEPING 且 energy >= 50 → IDLE
+
+#### 3. HISMA 仲裁系统升级 (useGameLogic.ts)
+
+**P1 生存层 - 进食逻辑**：
+- STARVING 检测库存 → SEEKING_FOOD 前往储粮点 → EATING 消耗食物恢复饱食度
+- 优先消耗 meat (+30)，然后 berry (+10)
+- 无食物时显示警告：⚠️ 储粮点无食物
+
+**P1 生存层 - 睡眠逻辑**：
+- EXHAUSTED → SLEEPING 前往篝火 → 由 useSurvival 自动恢复精力
+- energy >= 50 时自动唤醒
+
+**P3 使命层 - 归库逻辑**：
+- 砍树完成后不立即添加木材 → DELIVERING 前往储粮点 → 到达后 wood +1
+- 体现真实的物流流程
+
+#### 4. 世界区域系统
+
+**区域配置** (`WORLD_CONFIG`, `FACILITIES`):
+- settlementDiameter: 30 米（聚落核心区直径，半径15米，青色圈）
+- resourceDiameter: 60 米（资源区直径，半径30米，橙色圈）
+- bonfire: [0, 0, 0]（篝火，睡眠恢复点）
+- granary: [5, 0, 5]（储粮点，食物/木材存储）
+
+资源生成规则：树木和岩石只生成在聚落区外（距离中心 > 15米），最远到资源区边界（< 30米）
+
+**资源生成规则**：排除聚落核心区（R < 15），确保资源仅在荒野生成。
+
+**可视化组件** (`Environment.tsx`):
+- `ZoneBoundaries`: 青色环（R=15）+ 红色环（R=40）
+- `Bonfire`: 橙色点光源 + 火焰模型
+- `Granary`: 木质箱子 + 金字塔屋顶
+
+#### 5. GM 调试面板 (DebugPanel.tsx)
+
+**功能**：
+- 按 `P` 键切换显示/隐藏（仅当 !inputFocused）
+- 实时显示库存和智能体状态（State, Satiety, Energy）
+- 快捷操作：Add Berry +10, Add Meat +5, Starve All -10, Exhaust All -10, Restore All
+
+**UI 位置**：固定在右下角（bottom-24 right-4），半透明黑色背景。
+
+#### 6. UI 适配
+
+**资源面板** (`GameUI.tsx`): 显示 🪵 木材、🫐 浆果、🥩 生肉
+
+**场景组件** (`GameScene.tsx`): 引入 useSurvival、ZoneBoundaries、Bonfire、Granary、DebugPanel
+
+### 测试场景
+
+1. 启动游戏，观察 berry = 50
+2. 按 P 打开 GM 面板
+3. 点击 "Starve All -10" 降低 satiety < 20
+4. 观察 STARVING → SEEKING_FOOD → EATING 流程
+5. 确认 berry 减少，satiety 恢复
+6. 观察青色/红色边界显示
+7. 确认树木不在聚落区内生成
+
+### 文件清单
+
+**新建（2 个）**：
+- `humainity/app/hooks/useSurvival.ts` (~90 行)
+- `humainity/app/components/Debug/DebugPanel.tsx` (~140 行)
+
+**修改（6 个）**：
+- `GameConfig.ts` (+40 行)：FOOD_TYPES, INITIAL_RESOURCES, WORLD_CONFIG (扩展), FACILITIES, SURVIVAL_RATES
+- `GameState.ts` (重构 60 行)：inventory, addResource, consumeResource, modifyAllAgents
+- `useGameLogic.ts` (+80 行)：P1 进食/睡眠，P3 归库
+- `Environment.tsx` (+70 行)：ZoneBoundaries, Bonfire, Granary
+- `GameUI.tsx` (修改 10 行)：显示 inventory
+- `GameScene.tsx` (+30 行)：集成新系统
+
+**总计**：新增 ~400 行，修改 ~100 行
+
+### 架构演进
+
+- v0.1: 单资源 + 简单状态机
+- v0.2 Step 1: 多智能体 + 生存数值 + 双核模型
+- v0.2 Step 2: 库存系统 + 生存心跳 + HISMA 仲裁 + 世界区域 + GM 工具
+
+### 后续任务
+
+- Step 3: UI 层 - 灵魂透视镜（SoulInspector.tsx）
+- Step 4: AI 层 - LLM 集成，动态分工
+- Step 5: 测试层 - useSurvival 单元测试，HISMA 集成测试
+
 ## 维护指引
 - 新功能或改动时务必同步更新本文件（新增模块、数据流、交互变更、测试策略变更）。
 - 先更新文档，再补/改测试，提醒用户手动运行 `npm test`，全部通过后再视为完成开发。
@@ -1457,4 +1978,6 @@ export const MAP_SIZE_PRESETS = {
 - **测试配置**：`vitest.config.ts` 中设置 `watch: false` 防止进入监视模式；`package.json` 中使用 `vitest run` 执行一次性测试。
 - **v0.2 后的开发**：新增角色/环境组件时，优先在对应目录创建独立文件；复杂业务逻辑考虑提取为 Hook；保持 GameScene 作为纯容器。
 - **v0.3 后的开发**：调整游戏参数时优先在 GameConfig.ts 中修改；新增配置项需添加注释说明单位；保持配置对象的 `as const` 断言。
+- **Genesis V0.2 Step 1 后的开发**：操作智能体状态时使用 `updateAgent('agentId', { state: newState })`；新增智能体时在 GameState 初始化时添加到 `agents` 字典；UI 展示时从 `agents` 字典读取数据。
+- **Genesis V0.2 Step 2 后的开发**：调整生存系统参数在 SURVIVAL_RATES 配置中修改；新增食物类型时更新 FOOD_TYPES 和 inventory 类型定义；使用 addResource/consumeResource 操作库存；世界区域参数在 WORLD_CONFIG 中调整（settlementDiameter, resourceDiameter）；设施位置在 FACILITIES 中配置。注意：使用 getMapBoundary()、getSettlementRadius()、getResourceRadius() 获取派生值，不要直接使用已删除的 mapBoundary、coreArea、settlementRadius 等字段。
 

@@ -4,6 +4,22 @@ import userEvent from '@testing-library/user-event';
 import { useGameState } from '../app/components/Game/GameState';
 import GameUI from '../app/components/Game/GameUI';
 
+// Helper: 创建默认的 agent 数据
+const createDefaultAgent = (state: string = 'IDLE') => ({
+  dmitri: {
+    id: 'dmitri',
+    name: 'Dmitri',
+    primaryRole: 'worker' as const,
+    currentAssignment: 'Lumberjack',
+    stats: { satiety: 100, energy: 100, health: 100 },
+    capTraits: ['Strong'],
+    psychTraits: ['Loyal'],
+    state,
+    thoughtHistory: [],
+    shortTermMemory: [],
+  }
+});
+
 describe('对话输入和显示功能测试', () => {
   beforeEach(() => {
     // 重置游戏状态
@@ -13,8 +29,8 @@ describe('对话输入和显示功能测试', () => {
       logs: [],
       isNearAgent: false,
       inputFocused: false,
-      agentState: 'IDLE',
       pendingCommand: null,
+      agents: createDefaultAgent('IDLE'),
     });
   });
 
@@ -38,7 +54,7 @@ describe('对话输入和显示功能测试', () => {
   it('近场时输入框应显示"与德米特里交谈..."提示', () => {
     useGameState.setState({
       isNearAgent: true,
-      agentState: 'LISTENING',
+      agents: createDefaultAgent('LISTENING'),
     });
 
     render(<GameUI leaderName="测试领袖" />);
@@ -51,7 +67,7 @@ describe('对话输入和显示功能测试', () => {
     const user = userEvent.setup();
     useGameState.setState({
       isNearAgent: true,
-      agentState: 'LISTENING',
+      agents: createDefaultAgent('LISTENING'),
     });
 
     render(<GameUI leaderName="测试领袖" />);
@@ -120,7 +136,7 @@ describe('对话输入和显示功能测试', () => {
     const user = userEvent.setup();
     useGameState.setState({
       isNearAgent: true,
-      agentState: 'LISTENING',
+      agents: createDefaultAgent('LISTENING'),
     });
 
     render(<GameUI leaderName="测试领袖" />);
@@ -181,7 +197,7 @@ describe('对话输入和显示功能测试', () => {
     
     useGameState.setState({
       isNearAgent: true,
-      agentState: 'LISTENING',
+      agents: createDefaultAgent('LISTENING'),
     });
 
     render(<GameUI leaderName="测试领袖" />);
@@ -210,7 +226,7 @@ describe('对话输入和显示功能测试', () => {
     const user = userEvent.setup();
     useGameState.setState({
       isNearAgent: true,
-      agentState: 'LISTENING',
+      agents: createDefaultAgent('LISTENING'),
     });
 
     render(<GameUI leaderName="测试领袖" />);
@@ -263,7 +279,7 @@ describe('对话输入和显示功能测试', () => {
         { id: 5, text: '测试领袖: 消息3', type: 'chat' },
       ],
       isNearAgent: true,
-      agentState: 'LISTENING',
+      agents: createDefaultAgent('LISTENING'),
     });
 
     render(<GameUI leaderName="测试领袖" />);

@@ -10,6 +10,8 @@ import {
   RESPONSE_DELAY_CONFIG,
   ACTION_CONFIG,
   RESOURCE_CONFIG,
+  FACILITIES,
+  FOOD_TYPES,
   getRandomDelay
 } from '../config/GameConfig';
 
@@ -45,15 +47,23 @@ export function useGameLogic({
 }: UseGameLogicParams): UseGameLogicReturn {
   const {
     setNearAgent,
-    setAgentState,
-    agentState,
     pendingCommand,
     setPendingCommand,
     addLog,
     addWood,
     isNearAgent,
-    inputFocused
+    inputFocused,
+    agents,         // Genesis V0.2: 使用 agents 字典
+    updateAgent,    // Genesis V0.2: 更新智能体状态
+    inventory,      // Genesis V0.2: 库存系统
+    consumeResource, // Genesis V0.2: 消费资源
+    addResource,    // Genesis V0.2: 添加资源
   } = useGameState();
+  
+  // 获取 dmitri 的状态（兼容现有逻辑）
+  const dmitri = agents['dmitri'];
+  const agentState = dmitri?.state || 'IDLE';
+  const setAgentState = (state: AgentState) => updateAgent('dmitri', { state });
 
   const [actionTarget, setActionTarget] = useState<{ x: number; z: number } | null>(null);
   const actionDoneRef = useRef<() => void>(() => {});
@@ -62,7 +72,8 @@ export function useGameLogic({
 
   // 使用 ref 缓存上一次的状态，避免频繁更新
   const lastNearRef = useRef(false);
-  const lastAgentStateRef = useRef<AgentState>('IDLE');
+  // 缓存待更新的状态，避免在 useFrame 中直接调用 setState
+  const pendingStateUpdateRef = useRef<AgentState | null>(null);
 
   // 近场检测
   useFrame(() => {
@@ -84,19 +95,48 @@ export function useGameLogic({
     // 如果玩家正在输入，或NPC正在执行任务，不要强制切换状态
     if (inputFocused || agentState === 'THINKING' || agentState === 'ACTING' || agentState === 'ASKING') return;
     
-    let newState: AgentState | null = null;
-    if (near) {
-      if (agentState !== 'LISTENING') newState = 'LISTENING';
-    } else {
-      if (agentState !== 'IDLE') newState = 'IDLE';
+    // 根据距离决定目标状态，使用 ref 缓存避免在渲染期间 setState
+    if (near && agentState !== 'LISTENING') {
+      pendingStateUpdateRef.current = 'LISTENING';
+    } else if (!near && agentState !== 'IDLE') {
+      pendingStateUpdateRef.current = 'IDLE';
     }
-    
-    // 只在状态真正需要改变时才更新
-    if (newState && newState !== lastAgentStateRef.current) {
-      lastAgentStateRef.current = newState;
+  });
+
+  // 应用待更新的状态（在渲染完成后安全执行）
+  useEffect(() => {
+    if (pendingStateUpdateRef.current) {
+      const newState = pendingStateUpdateRef.current;
+      pendingStateUpdateRef.current = null;
       setAgentState(newState);
     }
   });
+
+  // ========== HISMA P1: 生存本能层 - 进食逻辑 (Genesis V0.2) ==========
+  useEffect(() => {
+    if (agentState !== 'STARVING') return;
+    
+    // 检查库存是否有食物
+    if (inventory.meat > 0 || inventory.berry > 0) {
+      // 前往储粮点
+      setActionTarget({ x: FACILITIES.granary[0], z: FACILITIES.granary[2] });
+      setAgentState('SEEKING_FOOD');
+      addLog('系统：德米特里感到饥饿，前往储粮点寻找食物。', 'system');
+    } else {
+      // 库存不足，显示警告（每5秒提示一次，避免刷屏）
+      addLog('系统：⚠️ 警告！储粮点无食物，德米特里陷入饥饿状态。', 'system');
+    }
+  }, [agentState, inventory]);
+
+  // ========== HISMA P1: 生存本能层 - 睡眠逻辑 (Genesis V0.2) ==========
+  useEffect(() => {
+    if (agentState !== 'EXHAUSTED') return;
+    
+    // 前往篝火休息
+    setActionTarget({ x: FACILITIES.bonfire[0], z: FACILITIES.bonfire[2] });
+    setAgentState('SLEEPING');
+    addLog('系统：德米特里精力耗尽，前往篝火旁休息。', 'system');
+  }, [agentState]);
 
   // 处理玩家指令
   useEffect(() => {
@@ -209,6 +249,42 @@ export function useGameLogic({
 
   // 砍树完成逻辑
   const onActionDone = () => {
+    // ========== HISMA P1: 进食完成逻辑 (Genesis V0.2) ==========
+    if (agentState === 'SEEKING_FOOD') {
+      // 到达储粮点，开始进食
+      let consumed = false;
+      let restoredAmount = 0;
+      
+      if (consumeResource('meat', 1)) {
+        restoredAmount = FOOD_TYPES.meat.restore;
+        consumed = true;
+        addLog(`系统：德米特里食用了${FOOD_TYPES.meat.icon}${FOOD_TYPES.meat.name}，恢复饱食度 +${restoredAmount}。`, 'system');
+      } else if (consumeResource('berry', 1)) {
+        restoredAmount = FOOD_TYPES.berry.restore;
+        consumed = true;
+        addLog(`系统：德米特里食用了${FOOD_TYPES.berry.icon}${FOOD_TYPES.berry.name}，恢复饱食度 +${restoredAmount}。`, 'system');
+      }
+      
+      if (consumed && dmitri) {
+        const newSatiety = Math.min(100, dmitri.stats.satiety + restoredAmount);
+        updateAgent('dmitri', {
+          stats: { ...dmitri.stats, satiety: newSatiety }
+        });
+        setAgentState('IDLE');
+        setActionTarget(null);
+      }
+      return;
+    }
+    
+    // ========== HISMA P1: 睡眠完成逻辑 (由 useSurvival 自动处理) ==========
+    // 当 energy >= 50 时，useSurvival 会自动将状态切换为 IDLE
+    if (agentState === 'SLEEPING') {
+      // 到达篝火，保持睡眠状态直到 useSurvival 唤醒
+      addLog('系统：德米特里在篝火旁沉沉睡去...', 'system');
+      return;
+    }
+    
+    // ========== HISMA P3: 砍树完成逻辑 ==========
     // 完成一次砍树 - 标记树木为倒地状态，而非立即删除
     let treeId: number | null = null;
     
@@ -242,8 +318,9 @@ export function useGameLogic({
       return clone;
     });
     
-    addWood(RESOURCE_CONFIG.woodPerTree);
-    addLog('系统：德米特里砍伐了树木，木材 +1。', 'system');
+    // 注意：此时不立即添加木材到库存，而是标记为"待运送"
+    // 木材将在 DELIVERING 到达储粮点后再添加
+    addLog('系统：德米特里砍伐了树木。', 'system');
     chopQueueRef.current = Math.max(0, chopQueueRef.current - 1);
     
     if (chopQueueRef.current > 0) {
@@ -294,8 +371,33 @@ export function useGameLogic({
         return currentResources;
       });
     } else {
-      // 所有任务完成，返回初始状态
+      // ========== HISMA P3: 所有砍树任务完成，返回储粮点归库 (Genesis V0.2) ==========
+      setActionTarget({ x: FACILITIES.granary[0], z: FACILITIES.granary[2] });
+      setAgentState('DELIVERING');
+      addLog('系统：德米特里准备将木材送回储粮点。', 'system');
+    }
+  };
+
+  // ========== HISMA P3: 归库完成逻辑 (Genesis V0.2) ==========
+  useEffect(() => {
+    if (agentState !== 'DELIVERING') return;
+    if (!actionTarget) return;
+    
+    // 检查是否到达储粮点
+    if (!agentRef.current) return;
+    const aPos = agentRef.current.position;
+    const dx = aPos.x - actionTarget.x;
+    const dz = aPos.z - actionTarget.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    
+    if (dist < INTERACTION_CONFIG.arrivalThreshold) {
+      // 到达储粮点，添加木材到库存
+      addResource('wood', RESOURCE_CONFIG.woodPerTree);
+      addLog('系统：德米特里将木材送回储粮点，木材 +1。', 'system');
+      
+      // 清除目标，返回初始状态
       setActionTarget(null);
+      
       // 延迟检查近场状态
       setTimeout(() => {
         if (!agentRef.current || !playerRef.current) {
@@ -308,7 +410,7 @@ export function useGameLogic({
         setAgentState(dist < INTERACTION_CONFIG.interactionRange ? 'LISTENING' : 'IDLE');
       }, INTERACTION_CONFIG.stateCheckDelay);
     }
-  };
+  }, [agentState, actionTarget, addResource, addLog, setAgentState]);
 
   return {
     actionTarget,

@@ -12,8 +12,21 @@ const resetStore = () =>
       logs: [],
       isNearAgent: false,
       inputFocused: false,
-      agentState: 'IDLE',
       pendingCommand: null,
+      agents: {
+        dmitri: {
+          id: 'dmitri',
+          name: 'Dmitri',
+          primaryRole: 'worker',
+          currentAssignment: 'Lumberjack',
+          stats: { satiety: 100, energy: 100, health: 100 },
+          capTraits: ['Strong'],
+          psychTraits: ['Loyal'],
+          state: 'IDLE',
+          thoughtHistory: [],
+          shortTermMemory: [],
+        }
+      }
     })
   );
 
@@ -25,13 +38,17 @@ describe('GameUI', () => {
   it('资源面板显示 wood 和 food', () => {
     act(() =>
       useGameState.setState({
-        wood: 5,
-        food: 3,
+        inventory: {
+          wood: 5,
+          berry: 10,
+          meat: 3,
+        },
       })
     );
     render(<GameUI leaderName="Test" />);
     expect(screen.getByText(/🪵 木材：5/)).toBeInTheDocument();
-    expect(screen.getByText(/🍎 食物：3/)).toBeInTheDocument();
+    expect(screen.getByText(/🫐 浆果：10/)).toBeInTheDocument();
+    expect(screen.getByText(/🥩 生肉：3/)).toBeInTheDocument();
   });
 
   it('资源面板使用古典石材样式', () => {
@@ -51,7 +68,20 @@ describe('GameUI', () => {
     act(() =>
       useGameState.setState({
         isNearAgent: true,
-        agentState: 'LISTENING',
+        agents: {
+          dmitri: {
+            id: 'dmitri',
+            name: 'Dmitri',
+            primaryRole: 'worker',
+            currentAssignment: 'Lumberjack',
+            stats: { satiety: 100, energy: 100, health: 100 },
+            capTraits: ['Strong'],
+            psychTraits: ['Loyal'],
+            state: 'LISTENING',
+            thoughtHistory: [],
+            shortTermMemory: [],
+          }
+        }
       })
     );
     render(<GameUI leaderName="Test" />);
@@ -72,7 +102,20 @@ describe('GameUI', () => {
     act(() =>
       useGameState.setState({
         isNearAgent: true,
-        agentState: 'ASKING',
+        agents: {
+          dmitri: {
+            id: 'dmitri',
+            name: 'Dmitri',
+            primaryRole: 'worker',
+            currentAssignment: 'Lumberjack',
+            stats: { satiety: 100, energy: 100, health: 100 },
+            capTraits: ['Strong'],
+            psychTraits: ['Loyal'],
+            state: 'ASKING',
+            thoughtHistory: [],
+            shortTermMemory: [],
+          }
+        }
       })
     );
     render(<GameUI leaderName="Test" />);
@@ -174,8 +217,21 @@ describe('GameUI', () => {
     act(() =>
       useGameState.setState({
         isNearAgent: true,
-        agentState: 'LISTENING',
         inputFocused: true, // 隐藏操作指引，避免 MouseWheelIcon 干扰
+        agents: {
+          dmitri: {
+            id: 'dmitri',
+            name: 'Dmitri',
+            primaryRole: 'worker',
+            currentAssignment: 'Lumberjack',
+            stats: { satiety: 100, energy: 100, health: 100 },
+            capTraits: ['Strong'],
+            psychTraits: ['Loyal'],
+            state: 'LISTENING',
+            thoughtHistory: [],
+            shortTermMemory: [],
+          }
+        }
       })
     );
     const { container } = render(<GameUI leaderName="Test" />);
@@ -191,8 +247,21 @@ describe('GameUI', () => {
     act(() =>
       useGameState.setState({
         isNearAgent: true,
-        agentState: 'ASKING',
         inputFocused: true, // 隐藏操作指引，避免 MouseWheelIcon 干扰
+        agents: {
+          dmitri: {
+            id: 'dmitri',
+            name: 'Dmitri',
+            primaryRole: 'worker',
+            currentAssignment: 'Lumberjack',
+            stats: { satiety: 100, energy: 100, health: 100 },
+            capTraits: ['Strong'],
+            psychTraits: ['Loyal'],
+            state: 'ASKING',
+            thoughtHistory: [],
+            shortTermMemory: [],
+          }
+        }
       })
     );
     const { container } = render(<GameUI leaderName="Test" />);
@@ -207,7 +276,20 @@ describe('GameUI', () => {
     act(() =>
       useGameState.setState({
         isNearAgent: true,
-        agentState: 'THINKING',
+        agents: {
+          dmitri: {
+            id: 'dmitri',
+            name: 'Dmitri',
+            primaryRole: 'worker',
+            currentAssignment: 'Lumberjack',
+            stats: { satiety: 100, energy: 100, health: 100 },
+            capTraits: ['Strong'],
+            psychTraits: ['Loyal'],
+            state: 'THINKING',
+            thoughtHistory: [],
+            shortTermMemory: [],
+          }
+        }
       })
     );
     const { container } = render(<GameUI leaderName="Test" />);

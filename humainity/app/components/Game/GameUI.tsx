@@ -17,16 +17,18 @@ function useToggle(initialValue = false): [boolean, () => void] {
 
 export default function GameUI({ leaderName }: GameUIProps) {
   const {
-    wood,
-    food,
+    inventory, // Genesis V0.2: 使用 inventory 系统
     logs,
     isNearAgent,
-    agentState,
     inputFocused,
     addLog,
     setPendingCommand,
     setInputFocused,
+    agents, // Genesis V0.2: 使用 agents 字典
   } = useGameState();
+  
+  // 获取 dmitri 的状态（兼容现有逻辑）
+  const agentState = agents['dmitri']?.state || 'IDLE';
   const [expanded, toggleExpanded] = useToggle(false);
   const [message, setMessage] = useState('');
   const [showChatHistory, setShowChatHistory] = useState(true);
@@ -117,11 +119,12 @@ export default function GameUI({ leaderName }: GameUIProps) {
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20 select-none">
-      {/* 资源面板 - 左上（HUD）：紧凑设计 */}
+      {/* 资源面板 - 左上（HUD）：紧凑设计 (Genesis V0.2) */}
       <div className="pointer-events-auto absolute top-4 left-4 px-3 py-2 bg-stone-300 border-2 border-stone-800 shadow-lg text-sm text-stone-900 font-serif">
         <div className="font-bold tracking-wide text-base mb-1">资源</div>
-        <div className="mt-1 text-sm">🪵 木材：{wood}</div>
-        <div className="mt-1 text-sm">🍎 食物：{food}</div>
+        <div className="mt-1 text-sm">🪵 木材：{inventory.wood}</div>
+        <div className="mt-1 text-sm">🫐 浆果：{inventory.berry}</div>
+        <div className="mt-1 text-sm">🥩 生肉：{inventory.meat}</div>
       </div>
 
       {/* 操作指引 - 左侧中间（智能隐藏：输入聚焦时隐藏，淡化存在感）*/}

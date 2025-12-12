@@ -1,0 +1,43 @@
+📘 HumAInity Genesis V0.2 架构设计文档：生命涌现 (Final)版本代号: Genesis V0.2核心目标: 将智能体从“单指令执行者”升级为“拥有生存压力、自主分工与复杂心理的生命体”。设计哲学: 数值驱动肉体，AI 驱动灵魂；底层机械稳定，上层叙事涌现。1. 底层架构 (Underlying Architecture)我们采用 HISMA (Hierarchical Interaction-Survival-Mission Architecture) 三层优先级状态机，结合 双核数据驱动。1.1 数据结构：AgentProfile (双核模型)我们将智能体的数据严格区分为 “肉体 (The Vessel)” 和 “灵魂 (The Soul)” 两大部分。export interface AgentProfile {
+  // --- 身份标识 (Identity) ---
+  id: string;
+  name: string; // e.g., "Dmitri"
+  
+  // [动态分工系统]
+  // primaryRole: 长期身份/擅长领域 (Static)
+  primaryRole: 'worker' | 'hunter' | 'scholar'; 
+  
+  // currentAssignment: 当前具体职责 (Dynamic)
+  // 由 AI 根据领袖愿景和环境需求自主切换。
+  currentAssignment: string;
+
+  // --- 肉体 (The Vessel) - 机械锚点 ---
+  // 生存数值 (0-100)，由 useSurvivalSystem 每秒计算
+  stats: {
+    satiety: number; // 饱食度 (影响健康，<20 触发饥饿)
+    energy: number;  // 精力值 (影响效率，<10 触发力竭)
+    health: number;  // 健康度 (归零死亡)
+  };
+  
+  // 能力特质 (Capability Traits)
+  capTraits: string[]; // e.g. ['Strong', 'QuickWalker']
+
+  // --- 灵魂 (The Soul) - 叙事锚点 ---
+  // 心理特质 (Psychological Traits)
+  psychTraits: string[]; // e.g. ['Pessimistic', 'Loyal']
+
+  // 状态机当前状态
+  state: AgentState;
+
+  // 心路历程 (Thought Chronicle) - 核心叙事资产
+  thoughtHistory: Array<{
+    tick: number;     // 发生的游戏时刻 (GameTick)
+    content: string;  // 独白内容 (LLM Generated)
+    trigger: string;  // 触发原因
+    mood: string;     // 当时情绪
+  }>;
+
+  // 短期记忆 (Short-term Memory) - 事实日志
+  shortTermMemory: string[];
+}
+1.2 状态机逻辑 (HISMA)采用 强抢占式 逻辑。优先级层级 (Layer)包含状态触发条件 (Trigger)行为特征🔴 P1生存本能 (Survival)STARVINGSEEKING_FOODEATINGSLEEPINGsatiety < 20energy < 101. 寻粮逻辑:触发 STARVING → 检查公共库存。若有粮 → 切换 SEEKING_FOOD，移动至 储粮点。到达 → 切换 EATING，播放动画，消耗库存，恢复饱食。若无粮 → 保持 STARVING，触发抱怨/拒绝。2. 拒绝机制:此层级激活时，强制拒绝玩家交互。🟡 P2社会交互 (Social)LISTENINGASKINGCHATTINGPONDERING玩家在交互范围内且 P1 未激活暂停 P3 工作，转向玩家。允许接收新愿景/指令。🟢 P3日常使命 (Mission)IDLEMOVINGWORKINGDELIVERINGP1 & P2 未激活执行由 currentAssignment 定义的循环逻辑。新增 DELIVERING (归库)：资源满载后运回储粮点。1.3 物理设施：公共储粮点 (Granary)为了让“生存”具备空间感，我们需要一个实体的食物存储与消耗点。定义: 聚落的核心资源堆放处。坐标: 固定位置 (e.g., [5, 0, 5])，在 GameConfig 中配置。交互规则:入库: 任务完成后 (Working -> Delivering)，必须移动至储粮点才能增加全局资源。消耗: 进食时 (Seeking Food -> Eating)，必须移动至储粮点才能恢复饱食度。2. 界面设计：灵魂透视镜 (Soul Inspector)2.1 交互流程Hover (悬停)： 鼠标移至 Agent 模型 → 模型高亮 → 头顶显示简略浮窗 (仅图标+名字)。Click (点击)： 左键点击 Agent → selectedAgentId 更新 → 右侧面板滑出。Close (关闭)： 点击 X / 空白处 / ESC → 面板关闭。2.2 面板布局左栏 (Body): 重点展示 Satiety 进度条。右栏 (Soul): 展示可滚动的 thoughtHistory 列表，高亮最新一条。3. 实现路径 (Step-by-Step)Step 1: 数据层重构 (Data Layer)Target: GameState.ts, GameConfig.tsAction:定义 AgentProfile 完整接口。在 GameConfig 中添加 STORAGE_LOCATION 和调整后的生存参数。重构 GameStore：引入 agents 字典和 selectedAgentId。Step 2: 逻辑层实现 (Logic Layer)Target: useGameLogic.ts, useSurvival.ts (New)Action:实现 useSurvival：全局心跳扣除数值。实现 HISMA 仲裁逻辑 (含 DELIVERING 和 SEEKING_FOOD)。Step 3: UI 层实现 (UI Layer)Target: SoulInspector.tsx (New), GameScene.tsxAction:实现储粮点可视模型。实现灵魂透视镜面板与点击交互。

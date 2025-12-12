@@ -15,7 +15,7 @@ describe('对话显示测试', () => {
       }
       result.current.setInputFocused(false);
       result.current.setNearAgent(false);
-      result.current.setAgentState('IDLE');
+      result.current.updateAgent('dmitri', { state: 'IDLE' });
     });
   });
 
@@ -112,7 +112,7 @@ describe('对话显示测试', () => {
 
     act(() => {
       result.current.setNearAgent(true);
-      result.current.setAgentState('LISTENING');
+      result.current.updateAgent('dmitri', { state: 'LISTENING' });
     });
 
     render(<GameUI leaderName="Archon" />);
@@ -194,7 +194,7 @@ describe('对话显示测试', () => {
 
     act(() => {
       result.current.setNearAgent(true);
-      result.current.setAgentState('LISTENING');
+      result.current.updateAgent('dmitri', { state: 'LISTENING' });
     });
 
     render(<GameUI leaderName="Archon" />);

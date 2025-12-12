@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { WORLD_CONFIG, ENVIRONMENT_CONFIG } from '../../config/GameConfig';
+import { WORLD_CONFIG, ENVIRONMENT_CONFIG, FACILITIES, getSettlementRadius, getResourceRadius } from '../../config/GameConfig';
 
 // Ground component - Low-Poly 风格占位符地面 (80x80)
 export function Ground() {
@@ -64,6 +64,81 @@ export function Water({ position, size = ENVIRONMENT_CONFIG.water.defaultSize }:
         clearcoatRoughness={0.3}
       />
     </mesh>
+  );
+}
+
+// ZoneBoundaries component - 区域边界可视化（Genesis V0.2）
+export function ZoneBoundaries() {
+  const settlementRadius = getSettlementRadius();
+  const resourceRadius = getResourceRadius();
+  
+  return (
+    <group>
+      {/* 聚落核心区 - 青色边界 (无资源生成区) */}
+      <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[settlementRadius - 0.2, settlementRadius, 64]} />
+        <meshBasicMaterial color="cyan" transparent opacity={0.3} />
+      </mesh>
+      
+      {/* 资源区外环 - 橙色边界 (资源生成范围) */}
+      <mesh position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[resourceRadius - 0.2, resourceRadius, 64]} />
+        <meshBasicMaterial color="orange" transparent opacity={0.3} />
+      </mesh>
+    </group>
+  );
+}
+
+// Bonfire component - 篝火（Genesis V0.2）
+export function Bonfire({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      {/* 橙色点光源 */}
+      <pointLight color="orange" intensity={2} distance={8} castShadow />
+      
+      {/* 火堆底座 - 圆柱体 */}
+      <mesh position={[0, 0.3, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.5, 0.6, 0.6, 8]} />
+        <meshStandardMaterial color="#3e2723" />
+      </mesh>
+      
+      {/* 火焰占位 - 圆锥体（发光材质） */}
+      <mesh position={[0, 0.9, 0]}>
+        <coneGeometry args={[0.3, 0.7, 6]} />
+        <meshBasicMaterial color="#ff6b35" />
+      </mesh>
+      
+      {/* 火花占位 - 小球 */}
+      <mesh position={[0.2, 1.2, 0.1]}>
+        <sphereGeometry args={[0.08, 8, 8]} />
+        <meshBasicMaterial color="#ffaa00" />
+      </mesh>
+    </group>
+  );
+}
+
+// Granary component - 储粮点（Genesis V0.2）
+export function Granary({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      {/* 主体箱子 */}
+      <mesh position={[0, 0.5, 0]} castShadow receiveShadow>
+        <boxGeometry args={[1.5, 1, 1.5]} />
+        <meshStandardMaterial color="#D2691E" />
+      </mesh>
+      
+      {/* 屋顶 - 金字塔形 */}
+      <mesh position={[0, 1.2, 0]} castShadow>
+        <coneGeometry args={[1.1, 0.6, 4]} />
+        <meshStandardMaterial color="#8B4513" />
+      </mesh>
+      
+      {/* 标记牌 - 小立方体 */}
+      <mesh position={[0, 1.6, 0]}>
+        <boxGeometry args={[0.3, 0.3, 0.05]} />
+        <meshBasicMaterial color="#FFD700" />
+      </mesh>
+    </group>
   );
 }
 

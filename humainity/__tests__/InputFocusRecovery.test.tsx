@@ -62,8 +62,21 @@ const resetStore = () =>
       logs: [],
       isNearAgent: false,
       inputFocused: false,
-      agentState: 'IDLE',
       pendingCommand: null,
+      agents: {
+        dmitri: {
+          id: 'dmitri',
+          name: 'Dmitri',
+          primaryRole: 'worker',
+          currentAssignment: 'Lumberjack',
+          stats: { satiety: 100, energy: 100, health: 100 },
+          capTraits: ['Strong'],
+          psychTraits: ['Loyal'],
+          state: 'IDLE',
+          thoughtHistory: [],
+          shortTermMemory: [],
+        }
+      }
     })
   );
 

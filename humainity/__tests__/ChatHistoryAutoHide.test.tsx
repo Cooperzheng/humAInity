@@ -13,6 +13,12 @@ describe('对话历史自动隐藏机制', () => {
   const mockGameState = {
     wood: 5,
     food: 0,
+    // Genesis V0.2: 新增 inventory 字段
+    inventory: {
+      wood: 5,
+      berry: 50,
+      meat: 0,
+    },
     logs: [
       { id: 1, text: '系统：游戏开始', type: 'system' },
       { id: 2, text: 'Archon: 你好', type: 'chat' },
@@ -24,11 +30,26 @@ describe('对话历史自动隐藏机制', () => {
       { id: 8, text: '系统：德米特里砍伐了树木，木材 +1', type: 'system' },
     ],
     isNearAgent: true,
-    agentState: 'LISTENING',
     inputFocused: false,
+    // Genesis V0.2: 新增 agents 字典
+    agents: {
+      dmitri: {
+        id: 'dmitri',
+        name: 'Dmitri',
+        primaryRole: 'worker',
+        currentAssignment: 'Lumberjack',
+        stats: { satiety: 100, energy: 100, health: 100 },
+        capTraits: ['Strong'],
+        psychTraits: ['Loyal'],
+        state: 'LISTENING',
+        thoughtHistory: [],
+        shortTermMemory: [],
+      }
+    },
     addLog: vi.fn(),
     setPendingCommand: vi.fn(),
     setInputFocused: vi.fn(),
+    updateAgent: vi.fn(),
   };
 
   beforeEach(() => {
