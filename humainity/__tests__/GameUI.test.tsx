@@ -7,6 +7,7 @@ import { useGameState } from '../app/components/Game/GameState';
 const resetStore = () =>
   act(() =>
     useGameState.setState({
+      inventory: { wood: 0, berry: 0, meat: 0 },
       wood: 0,
       food: 0,
       logs: [],
@@ -26,7 +27,8 @@ const resetStore = () =>
           thoughtHistory: [],
           shortTermMemory: [],
         }
-      }
+      },
+      selectedAgentId: null,
     })
   );
 
@@ -46,9 +48,13 @@ describe('GameUI', () => {
       })
     );
     render(<GameUI leaderName="Test" />);
-    expect(screen.getByText(/🪵 木材：5/)).toBeInTheDocument();
-    expect(screen.getByText(/🫐 浆果：10/)).toBeInTheDocument();
-    expect(screen.getByText(/🥩 生肉：3/)).toBeInTheDocument();
+    // 使用更灵活的查找方式（数字现在在 span 中）
+    expect(screen.getByText(/🪵 木材/)).toBeInTheDocument();
+    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(screen.getByText(/🫐 浆果/)).toBeInTheDocument();
+    expect(screen.getByText('10')).toBeInTheDocument();
+    expect(screen.getByText(/🥩 生肉/)).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
   });
 
   it('资源面板使用古典石材样式', () => {

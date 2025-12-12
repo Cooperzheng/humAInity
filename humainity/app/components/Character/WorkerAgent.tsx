@@ -15,15 +15,18 @@ import {
 
 // WorkerAgent component - NPC 智能体 "德米特里"
 interface WorkerAgentProps {
+  agentId: string; // Genesis V0.2 Step 3: 智能体ID
   playerRef: React.RefObject<THREE.Group>;
   agentState: AgentState;
   isNearAgent: boolean; // 新增：玩家是否在近场
+  isSelected: boolean; // Genesis V0.2 Step 3: 是否被选中
   actionTarget: { x: number; z: number } | null;
   onActionDone: () => void;
+  onSelect: () => void; // Genesis V0.2 Step 3: 选中回调
 }
 
 const WorkerAgent = forwardRef<THREE.Group, WorkerAgentProps>(function WorkerAgent(
-  { playerRef, agentState, isNearAgent, actionTarget, onActionDone },
+  { agentId, playerRef, agentState, isNearAgent, isSelected, actionTarget, onActionDone, onSelect },
   ref
 ) {
   const groupRef = useRef<THREE.Group>(null);
@@ -213,7 +216,14 @@ const WorkerAgent = forwardRef<THREE.Group, WorkerAgentProps>(function WorkerAge
   });
 
   return (
-    <group ref={groupRef} position={NPC_CONFIG.initialPosition}>
+    <group
+      ref={groupRef}
+      position={NPC_CONFIG.initialPosition}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect();
+      }}
+    >
       {/* 身体 */}
       <mesh position={[0, 0.25, 0]} castShadow>
         <capsuleGeometry args={[0.22, 0.55, 4, 8]} />
@@ -263,6 +273,21 @@ const WorkerAgent = forwardRef<THREE.Group, WorkerAgentProps>(function WorkerAge
           {getStatusIcon()}德米特里
         </div>
       </Html>
+
+      {/* 选中指示器 - 倒三角 */}
+      {isSelected && (
+        <Html position={[0, 1.5, 0]} center>
+          <div style={{
+            fontSize: '20px',
+            color: '#FFD700',
+            textShadow: '0 0 4px rgba(255, 215, 0, 0.8)',
+            pointerEvents: 'none',
+            animation: 'pulse 1.5s ease-in-out infinite'
+          }}>
+            ▼
+          </div>
+        </Html>
+      )}
     </group>
   );
 });

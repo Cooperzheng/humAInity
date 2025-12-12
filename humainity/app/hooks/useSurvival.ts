@@ -3,6 +3,46 @@
 import { useEffect } from 'react';
 import { useGameState } from '../components/Game/GameState';
 import { SURVIVAL_RATES } from '../config/GameConfig';
+import { AgentState } from '../types/Agent';
+
+// 状态进入模板 (Genesis V0.2 Step 3)
+const THOUGHT_TEMPLATES: Partial<Record<AgentState, { content: string; trigger: string; mood: string }>> = {
+  STARVING: {
+    content: '肚子好饿...储粮点还有吃的吗？我得去看看。',
+    trigger: '饥饿触发',
+    mood: 'anxious'
+  },
+  EXHAUSTED: {
+    content: '身体实在撑不住了，需要休息一下。篝火那边应该能让我恢复精力。',
+    trigger: '力竭触发',
+    mood: 'fatigued'
+  },
+  EATING: {
+    content: '终于有吃的了...这种饱腹感真好。',
+    trigger: '进食开始',
+    mood: 'relieved'
+  },
+  SLEEPING: {
+    content: '火光很温暖...让我睡一会儿。',
+    trigger: '睡眠开始',
+    mood: 'peaceful'
+  },
+  IDLE: {
+    content: '现在感觉还不错，等待领袖的下一个指示。',
+    trigger: '恢复正常',
+    mood: 'calm'
+  },
+  SEEKING_FOOD: {
+    content: '必须赶快找到食物，不然真的要撑不住了。',
+    trigger: '寻找食物',
+    mood: 'urgent'
+  },
+  DELIVERING: {
+    content: '把这些木材送回储粮点，这样大家都能用上。',
+    trigger: '运送资源',
+    mood: 'dutiful'
+  },
+};
 
 /**
  * useSurvival - 生存系统心跳 (Genesis V0.2)
@@ -74,9 +114,24 @@ export function useSurvival() {
           newState !== state;
         
         if (hasChanges) {
+          // Genesis V0.2 Step 3: 状态进入时写入 thoughtHistory
+          let newThoughtHistory = agent.thoughtHistory;
+          if (newState !== state && THOUGHT_TEMPLATES[newState]) {
+            const template = THOUGHT_TEMPLATES[newState]!;
+            const newThought = {
+              tick: Date.now(),
+              content: template.content,
+              trigger: template.trigger,
+              mood: template.mood,
+            };
+            // 将新想法放在数组开头（最新在 index 0）
+            newThoughtHistory = [newThought, ...agent.thoughtHistory].slice(0, 20); // 保留最近 20 条
+          }
+
           updateAgent(id, {
             stats: { ...stats, satiety: newSatiety, energy: newEnergy },
-            state: newState
+            state: newState,
+            thoughtHistory: newThoughtHistory,
           });
         }
       });

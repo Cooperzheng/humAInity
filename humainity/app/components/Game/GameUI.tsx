@@ -4,6 +4,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { useGameState } from './GameState';
 import { EarIcon } from '../Icons/EarIcon';
 import { MouseWheelIcon } from '../Icons/MouseWheelIcon';
+import SoulInspector from '../Inspector/SoulInspector';
 
 interface GameUIProps {
   leaderName: string;
@@ -122,9 +123,15 @@ export default function GameUI({ leaderName }: GameUIProps) {
       {/* 资源面板 - 左上（HUD）：紧凑设计 (Genesis V0.2) */}
       <div className="pointer-events-auto absolute top-4 left-4 px-3 py-2 bg-stone-300 border-2 border-stone-800 shadow-lg text-sm text-stone-900 font-serif">
         <div className="font-bold tracking-wide text-base mb-1">资源</div>
-        <div className="mt-1 text-sm">🪵 木材：{inventory.wood}</div>
-        <div className="mt-1 text-sm">🫐 浆果：{inventory.berry}</div>
-        <div className="mt-1 text-sm">🥩 生肉：{inventory.meat}</div>
+        <div className="mt-1 text-sm">
+          🪵 木材：<span className={inventory.wood === 0 ? 'text-red-600 font-bold' : ''}>{inventory.wood}</span>
+        </div>
+        <div className="mt-1 text-sm" title="基础食物 +10 饱食度">
+          🫐 浆果：<span className={inventory.berry === 0 ? 'text-red-600 font-bold' : ''}>{inventory.berry}</span>
+        </div>
+        <div className="mt-1 text-sm" title="高级食物 +30 饱食度">
+          🥩 生肉：<span className={inventory.meat === 0 ? 'text-red-600 font-bold' : ''}>{inventory.meat}</span>
+        </div>
       </div>
 
       {/* 操作指引 - 左侧中间（智能隐藏：输入聚焦时隐藏，淡化存在感）*/}
@@ -241,6 +248,9 @@ export default function GameUI({ leaderName }: GameUIProps) {
           </button>
         </div>
       </div>
+
+      {/* 灵魂透视镜 - 右侧滑出面板 (Genesis V0.2 Step 3) */}
+      <SoulInspector />
     </div>
   );
 }

@@ -18,7 +18,7 @@ import { WORLD_CONFIG, RESOURCE_CONFIG, CAMERA_CONFIG, FACILITIES, getSettlement
 function GameSceneInner({ leaderName }: { leaderName: string }) {
   const playerRef = useRef<THREE.Group>(null);
   const agentRef = useRef<THREE.Group>(null);
-  const { isNearAgent, agents } = useGameState();
+  const { isNearAgent, agents, selectedAgentId, selectAgent, deselectAgent } = useGameState();
   
   // Genesis V0.2: 从 agents 字典获取 dmitri 的状态
   const agentState = agents['dmitri']?.state || 'IDLE';
@@ -131,11 +131,14 @@ function GameSceneInner({ leaderName }: { leaderName: string }) {
       <PlayerLeader leaderName={leaderName} ref={playerRef} />
       <WorkerAgent
         ref={agentRef}
+        agentId="dmitri"
         playerRef={playerRef}
         agentState={agentState}
         isNearAgent={isNearAgent}
+        isSelected={selectedAgentId === 'dmitri'}
         actionTarget={actionTarget}
         onActionDone={onActionDone}
+        onSelect={() => selectAgent('dmitri')}
       />
       
       {/* 轨道控制 */}
@@ -157,7 +160,7 @@ interface GameSceneProps {
 
 export default function GameScene({ leaderName }: GameSceneProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const { setInputFocused } = useGameState();
+  const { setInputFocused, deselectAgent } = useGameState();
 
   // 处理点击游戏区域：强制清除输入焦点，确保WASD控制恢复
   const handlePointerDown = () => {
@@ -193,6 +196,7 @@ export default function GameScene({ leaderName }: GameSceneProps) {
         shadows
         dpr={[1, 2]}
         gl={{ antialias: true }}
+        onPointerMissed={deselectAgent}
       >
         <color attach="background" args={['#f0f0e0']} />
         <GameSceneInner leaderName={leaderName} />
