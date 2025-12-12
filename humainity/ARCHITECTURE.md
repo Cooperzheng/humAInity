@@ -24,6 +24,8 @@
 - `app/components/Icons/`
   - `EarIcon.tsx`：耳朵图标（近场对话状态指示）。
   - `MouseWheelIcon.tsx`：鼠标滚轮图标（v0.3.1 新增，操作指引用）。
+- `app/components/Inspector/`（Genesis V0.2 Step 3 新增）
+  - `SoulInspector.tsx`：智能体灵魂透视镜。点击智能体后右侧滑入，显示详细信息面板（生存数值、特质、心路历程）。
 - `app/hooks/`（v0.2 新增）
   - `useWASDControls.ts`：键盘控制 Hook，监听 WASD 按键，返回移动向量计算函数。
   - `useGameLogic.ts`：**核心游戏逻辑 Hook**。封装近场检测、指令解析、砍树流程、资源管理等复杂业务逻辑，供 GameScene 调用。
@@ -41,8 +43,17 @@
      - **资源节点**：遍历 resources 数组，渲染 `<ResourceTile />`。
      - **角色组件**：
        - `<PlayerLeader />`: 接收 leaderName 和 playerRef。内部调用 `useWASDControls` 实现移动。
-       - `<WorkerAgent />`: 接收 agentRef、playerRef、agentState、isNearAgent、actionTarget、onActionDone。内部实现状态机和动画。
+       - `<WorkerAgent />`: 接收 agentRef、playerRef、agentState、isNearAgent、actionTarget、onActionDone、isSelected、onSelect。内部实现状态机和动画。
+         - **状态图标系统**（Genesis V0.2 Step 3）：头顶显示动态emoji图标
+           - ACTING（工作中）：🪓
+           - THINKING（思考中）：⚙️
+           - LISTENING（倾听中）：👂（需同时满足 `isNearAgent`）
+           - IDLE（闲置中）：🚶
+         - **选中视觉反馈**（Genesis V0.2 Step 3）：当 `isSelected = true` 时，头顶显示金色倒三角指示器（position: [0, 2.2, 0]），带 bounce 动画
+         - **点击交互**：点击智能体时调用 `onSelect` 回调，触发选中操作
      - **轨道控制**：`<OrbitControls />`（允许旋转、缩放、平移）。
+   - **灵魂透视镜**（Genesis V0.2 Step 3）：
+     - `<SoulInspector />`：固定在屏幕右侧的滑入面板，显示选中智能体的详细信息
 
 3) **游戏逻辑（`useGameLogic` Hook）**：
    - **近场检测**（`useFrame`）：
@@ -62,6 +73,14 @@
      - 更新木材资源（`addWood(+1)`），记录系统日志。
      - 队列未空：寻找下一棵树，继续 ACTING。
      - 队列清空：检测实时距离，返回 LISTENING 或 IDLE。
+   - **智能体选中系统**（Genesis V0.2 Step 3）：
+     - 状态管理：`selectedAgentId: string | null` - 记录当前选中的智能体ID
+     - 选中操作：`selectAgent(id)` - 设置 `selectedAgentId`，触发 SoulInspector 显示
+     - 取消选中：`deselectAgent()` - 清除 `selectedAgentId`，关闭 SoulInspector
+     - 点击逻辑：
+       - 点击智能体：调用 `selectAgent(agentId)`
+       - 点击遮罩层/关闭按钮：调用 `deselectAgent()`
+     - 视觉反馈：选中时智能体头顶显示金色▼图标（带 bounce 动画）
 
 4) **UI 层（`GameUI`）- 四区域布局设计（v0.3 重构）**：
    
@@ -134,11 +153,17 @@ GameUI 采用四区域分布式布局，最大化减少对 3D 场景中心的遮
 
 ### 1. 左上角资源面板（HUD）
 - **定位**：`top-4 left-4`
-- **内容**：木材、食物资源数量
+- **内容**：木材、浆果、生肉资源数量
 - **设计**：
   - 紧凑样式（`px-3 py-2`）
   - 石材/木纹风格（`bg-stone-300`, `border-stone-800`）
   - 固定宽度，不随窗口变化
+- **增强功能**（Genesis V0.2 Step 3）：
+  - **Tooltip 提示**：鼠标悬停时显示资源说明（使用 `title` 属性）
+    - 木材：用于建造建筑
+    - 浆果：低营养食物，饱食度 +10
+    - 生肉：高营养食物，饱食度 +30
+  - **0 值警示**：资源数量为 0 时，数字显示为红色（`text-red-600`），提醒玩家补充
 
 ### 2. 左侧中间操作指引（Controls - v0.3.1 淡化优化）
 - **定位**：`top-1/2 left-4 -translate-y-1/2`（垂直居中）
@@ -219,13 +244,77 @@ const placeholder = isNearAgent ? '与德米特里交谈...' : '输入消息...'
 - **状态指示器过渡**：`transition-all duration-300`（背景色、图标切换）
 - **操作指引淡入淡出**：`transition-opacity duration-300`
 - **模糊背景**：`backdrop-blur-sm`（操作指引区域）
+- **选中指示器弹跳动画**（Genesis V0.2 Step 3）：`animate-bounce`（Tailwind 内置，金色倒三角）
+
+### 5. 灵魂透视镜面板（SoulInspector - Genesis V0.2 Step 3）
+
+#### 触发方式
+- **打开**：点击任意智能体 → 调用 `selectAgent(agentId)` → `selectedAgentId` 被设置
+- **关闭**：
+  - 点击关闭按钮（右上角 ✕）
+  - 点击遮罩层（半透明黑色背景）
+  - 两者都调用 `deselectAgent()` 清空 `selectedAgentId`
+
+#### 面板布局
+- **位置**：固定在屏幕右侧（`fixed inset-0 justify-end`）
+- **宽度**：`w-[600px]`，最大 `max-w-[90vw]`（移动端适配）
+- **动画**：右侧滑入（`animate-slide-in-right`）
+- **背景**：羊皮纸色（`bg-[#F5E6D3]`），古典风格
+
+#### 显示内容
+
+**标题区域**：
+- 角色头像：根据 `primaryRole` 显示 emoji（👷 worker / 🏹 hunter / 📚 scholar）
+- 名称：`agent.name`（大号字体）
+- 当前职责：`agent.currentAssignment`（加粗显示）
+- 角色类型：`agent.primaryRole`（小字显示）
+
+**左栏 - 肉体 (The Vessel)**：
+- **生存数值**（带进度条）：
+  - 饱食度 (Satiety)：`agent.stats.satiety` (0-100%)
+  - 精力值 (Energy)：`agent.stats.energy` (0-100%)
+  - 健康度 (Health)：`agent.stats.health` (0-100%)
+  - 进度条颜色：绿色（>50）、橙色（20-50）、红色（<20）
+  - 数值颜色：同步进度条颜色，动态警示
+- **心理特质 (Psych)**：`agent.psychTraits` 数组，紫色标签
+- **能力特质 (Cap)**：`agent.capTraits` 数组，蓝色标签
+
+**右栏 - 灵魂 (The Soul)**：
+- **当前想法**：`agent.thoughtHistory[0]?.content`（琥珀色背景框，突出显示）
+- **心路历程**：`agent.thoughtHistory.slice(1)`（最近 20 条）
+  - 显示 trigger（触发原因）和 mood（情绪）
+  - 可滚动查看完整历史（`max-h-[400px]`）
+  - 使用自定义滚动条样式（`.scrollbar-classic`）
+
+#### 数据来源
+- 从 `useGameState` 中获取：
+  - `selectedAgentId`：当前选中的智能体ID
+  - `agents[selectedAgentId]`：完整的 `AgentProfile` 对象
+  - `deselectAgent`：关闭面板的操作函数
+- 如果 `selectedAgentId` 为 `null` 或智能体不存在，返回 `null`（不显示面板）
+
+#### 交互细节
+- **关闭按钮**：右上角固定按钮，深色背景，hover 变亮
+- **遮罩层**：点击空白区域关闭面板（提升用户体验）
+- **滚动**：心路历程区域支持独立滚动，不影响整体布局
+- **过渡效果**：进度条数值变化有 700ms 缓动动画（`transition-all duration-700 ease-out`）
+
+#### 设计风格
+- **古典羊皮纸风格**：与游戏整体 UI 保持一致
+- **两栏布局**：左栏（肉体）机械数据，右栏（灵魂）叙事内容
+- **色彩系统**：
+  - 生存数值：红/橙/绿三色警示
+  - 心理特质：紫色（精神层面）
+  - 能力特质：蓝色（物理层面）
+  - 想法区域：琥珀色（温暖、回忆感）
 
 ## 状态与数据
-- `wood`：当前木材数量。
+- `inventory`：库存资源对象 `{ wood, berry, meat }`（Genesis V0.2 升级）。
 - `logs`：日志队列（保留最近 200 条）。
 - `isNearAgent`：是否处于近场。
 - `inputFocused`：输入框聚焦时屏蔽 WASD 移动。
-- `agentState`：NPC 状态机。
+- `agents`：智能体字典 `Record<string, AgentProfile>`（Genesis V0.2 新增）。
+- `selectedAgentId`：当前选中的智能体ID（Genesis V0.2 Step 3 新增）。
 - `pendingCommand`：待解析的玩家指令（字符串）。
 
 ## 测试策略
@@ -1533,6 +1622,65 @@ thoughtHistory: Array<{       // 心路历程（核心叙事资产）
 shortTermMemory: string[];    // 短期记忆（事实日志）
 ```
 
+**想法生成机制（Genesis V0.2 Step 3）**：
+
+智能体的想法（thought）在特定时机自动生成，记录其心路历程，为叙事提供素材。
+
+**生成时机1：状态跨层级变化时**
+- 实现位置：`useSurvival.ts`
+- 触发逻辑：
+  1. 计算旧状态和新状态的优先级层级（P1/P2/P3）
+  2. 使用 `getStatePriority(state)` 函数判断层级
+  3. **仅当 `oldPriority !== newPriority` 时才生成想法**
+  4. 从 `THOUGHT_TEMPLATES` 中获取对应模板
+  5. 创建 thought 对象，插入 `thoughtHistory` 开头（最新在 index 0）
+- 设计目的：避免同层级内频繁状态切换产生重复想法（如 P3 的 IDLE → MOVING → WORKING）
+- 示例：
+  - P3(IDLE) → P1(STARVING)：生成想法 ✅ "肚子在叫...我得去找点吃的"
+  - P1(STARVING) → P1(SEEKING_FOOD)：不生成想法 ❌（同层级）
+  - P1(EATING) → P3(IDLE)：生成想法 ✅ "现在感觉还不错"
+
+**生成时机2：职责变更时**
+- 实现位置：`GameState.ts` - `updateAgent` 函数
+- 触发逻辑：
+  1. 检测 `updates.currentAssignment` 是否与旧值不同
+  2. 如果变更，自动生成想法模板
+  3. 内容：`"我的新职责是 {assignment}，我会尽力完成的。"`
+  4. trigger: `'职责变更'`，mood: `'determined'`
+- 设计目的：记录智能体接受新使命的时刻，完善心路历程
+- 示例：
+  - 玩家指派德米特里从"伐木工"变为"猎人" → 生成想法 ✅
+
+**状态优先级函数 `getStatePriority()`**：
+```typescript
+function getStatePriority(state: AgentState): 1 | 2 | 3 {
+  // P1: 生存本能 (最高优先级)
+  if (['STARVING', 'SEEKING_FOOD', 'EATING', 'SLEEPING', 'EXHAUSTED'].includes(state)) {
+    return 1;
+  }
+  // P2: 社会交互 (中优先级)
+  if (['LISTENING', 'THINKING', 'ASKING', 'CHATTING', 'PONDERING'].includes(state)) {
+    return 2;
+  }
+  // P3: 日常使命 (最低优先级)
+  return 3; // IDLE, MOVING, WORKING, DELIVERING, ACTING
+}
+```
+
+**想法模板 `THOUGHT_TEMPLATES`**：
+- 位置：`useSurvival.ts`
+- 结构：`Record<AgentState, { content, trigger, mood }>`
+- 覆盖状态：
+  - P1 生存本能：STARVING, SEEKING_FOOD, EATING, EXHAUSTED, SLEEPING
+  - P2 社会交互：LISTENING, THINKING, ASKING
+  - P3 日常使命：IDLE, MOVING, WORKING, DELIVERING
+- 内容风格：第一人称独白，体现智能体的内心活动
+
+**数据管理**：
+- 想法数组：`thoughtHistory` 最新在 index 0，保留最近 20 条
+- 超出限制：`[newThought, ...oldHistory].slice(0, 20)` 自动截断
+- 在 SoulInspector 中展示：`thoughtHistory[0]` 为当前想法，`thoughtHistory.slice(1)` 为历史
+
 ### 数据结构迁移
 
 #### 旧架构 (v0.1)
@@ -1892,6 +2040,14 @@ useEffect(() => {
 - STARVING 检测库存 → SEEKING_FOOD 前往储粮点 → EATING 消耗食物恢复饱食度
 - 优先消耗 meat (+30)，然后 berry (+10)
 - 无食物时显示警告：⚠️ 储粮点无食物
+- **进食循环优化**（Genesis V0.2 Step 3）：
+  - 新增配置：`SURVIVAL_RATES.satietySafeLevel = 50`（饱食安全水平）
+  - EATING 状态结束后检查：
+    - 如果 `satiety < satietySafeLevel` 且有食物 → 重置到达标志，重新进入 SEEKING_FOOD
+    - 如果 `satiety >= satietySafeLevel` 或无食物 → 退出进食流程
+  - 避免问题：原逻辑一次只吃一份食物，可能导致饱食度恢复不足就退出，频繁触发饥饿
+  - 用户体验：智能体会持续进食直到饱食度达到 50，完全恢复后才返回工作状态
+  - 实现位置：`useGameLogic.ts` - EATING 状态的 `setTimeout` 回调
 
 **P1 生存层 - 睡眠逻辑**：
 - EXHAUSTED → SLEEPING 前往篝火 → 由 useSurvival 自动恢复精力
@@ -1901,7 +2057,34 @@ useEffect(() => {
 - 砍树完成后不立即添加木材 → DELIVERING 前往储粮点 → 到达后 wood +1
 - 体现真实的物流流程
 
-#### 4. 世界区域系统
+#### 4. HISMA 延迟配置（Genesis V0.2 Step 3新增）
+
+**配置位置**：`GameConfig.ts` - `HISMA_DELAY_CONFIG`
+
+**延迟参数**：
+- `eatingMs: 2000`（毫秒）- 进食动作持续时间（2秒）
+  - 用途：EATING 状态下，智能体到达储粮点后的进食表演时间
+  - 实现：`setTimeout(() => { /* 消耗食物、恢复饱食度 */ }, HISMA_DELAY_CONFIG.eatingMs)`
+  - 意义：避免瞬间完成进食，模拟真实的进食过程
+- `deliveryUnloadMs: 1500`（毫秒）- 卸货动作持续时间（1.5秒）
+  - 用途：DELIVERING 状态下，智能体到达储粮点后的卸货表演时间
+  - 实现：`setTimeout(() => { /* 添加木材到库存 */ }, HISMA_DELAY_CONFIG.deliveryUnloadMs)`
+  - 意义：体现真实的物流流程，给玩家视觉反馈时间
+
+**状态锁机制**：
+- 使用 `stateLockUntilRef.current` 记录状态锁定时间
+- 延迟期间，useSurvival 的生存检测不会强制切换状态
+- 确保动作表演完整，不被中途打断
+
+**使用场景**：
+- EATING：到达储粮点 → 等待 2 秒（表演进食）→ 消耗食物 → 检查是否继续进食
+- DELIVERING：到达储粮点 → 等待 1.5 秒（表演卸货）→ 添加木材 → 返回 IDLE/LISTENING
+
+**配置扩展性**：
+- 未来可添加其他动作延迟：sleepingMs（睡眠一轮时间）、craftingMs（制作物品时间）等
+- 统一管理所有 HISMA 状态的驻留时间，便于游戏节奏调整
+
+#### 5. 世界区域系统
 
 **区域配置** (`WORLD_CONFIG`, `FACILITIES`):
 - settlementDiameter: 30 米（聚落核心区直径，半径15米，青色圈）
@@ -1980,4 +2163,16 @@ useEffect(() => {
 - **v0.3 后的开发**：调整游戏参数时优先在 GameConfig.ts 中修改；新增配置项需添加注释说明单位；保持配置对象的 `as const` 断言。
 - **Genesis V0.2 Step 1 后的开发**：操作智能体状态时使用 `updateAgent('agentId', { state: newState })`；新增智能体时在 GameState 初始化时添加到 `agents` 字典；UI 展示时从 `agents` 字典读取数据。
 - **Genesis V0.2 Step 2 后的开发**：调整生存系统参数在 SURVIVAL_RATES 配置中修改；新增食物类型时更新 FOOD_TYPES 和 inventory 类型定义；使用 addResource/consumeResource 操作库存；世界区域参数在 WORLD_CONFIG 中调整（settlementDiameter, resourceDiameter）；设施位置在 FACILITIES 中配置。注意：使用 getMapBoundary()、getSettlementRadius()、getResourceRadius() 获取派生值，不要直接使用已删除的 mapBoundary、coreArea、settlementRadius 等字段。
+- **Genesis V0.2 Step 3 后的开发**：
+  - **智能体选中系统**：点击智能体时调用 `selectAgent(agentId)`，关闭面板时调用 `deselectAgent()`；在 WorkerAgent 中传入 `isSelected` 和 `onSelect` props 实现点击交互；选中时显示金色倒三角指示器（带 bounce 动画）。
+  - **SoulInspector 面板**：从 `useGameState` 获取 `selectedAgentId` 和 `agents[selectedAgentId]`；显示生存数值、特质、心路历程；右侧滑入动画使用 `animate-slide-in-right`；遮罩层点击调用 `deselectAgent()`。
+  - **想法生成机制**：
+    - 状态跨层级变化时自动生成（P1↔P2↔P3）：在 `useSurvival.ts` 中使用 `getStatePriority()` 判断层级，只在 `oldPriority !== newPriority` 时生成。
+    - 职责变更时自动生成：在 `GameState.ts` 的 `updateAgent` 中检测 `currentAssignment` 变化。
+    - 想法模板在 `THOUGHT_TEMPLATES` 中定义，使用第一人称独白风格。
+    - 想法数组最新在 index 0，保留最近 20 条。
+  - **HUD 增强**：资源数量为 0 时显示红色（`text-red-600`）；使用 `title` 属性添加 tooltip 提示资源说明。
+  - **HISMA 延迟配置**：在 `HISMA_DELAY_CONFIG` 中定义动作驻留时间（eatingMs, deliveryUnloadMs）；使用 `stateLockUntilRef` 防止延迟期间被生存系统强制切换状态。
+  - **进食循环优化**：使用 `SURVIVAL_RATES.satietySafeLevel` 配置安全水平；EATING 结束后检查饱食度，未达标且有食物时重新进入 SEEKING_FOOD；避免频繁触发饥饿状态。
+  - **状态图标系统**：在 WorkerAgent 头顶根据 `agentState` 显示 emoji 图标（ACTING: 🪓, THINKING: ⚙️, LISTENING: 👂, IDLE: 🚶）；LISTENING 图标需同时满足 `isNearAgent` 条件。
 

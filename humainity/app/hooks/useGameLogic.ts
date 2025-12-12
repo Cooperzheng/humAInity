@@ -13,6 +13,7 @@ import {
   RESOURCE_CONFIG,
   FACILITIES,
   FOOD_TYPES,
+  SURVIVAL_RATES,
   getRandomDelay
 } from '../config/GameConfig';
 
@@ -180,8 +181,37 @@ export function useGameLogic({
             updateAgent('dmitri', { stats: { ...d.stats, satiety: newSatiety } });
           }
 
-          // 进食结束：按距离仲裁（你选择：near->LISTENING，否则->IDLE）
-          setAgentState(arbitrateIdleOrListening());
+          // 进食结束：检查是否需要继续进食
+          const currentAgent = useGameState.getState().agents['dmitri'];
+          if (!currentAgent) return;
+          
+          const needMoreFood = currentAgent.stats.satiety < SURVIVAL_RATES.satietySafeLevel;
+          const { inventory } = useGameState.getState();
+          const hasFood = inventory.meat > 0 || inventory.berry > 0;
+
+          if (needMoreFood && hasFood) {
+            // 饱食度还未达到安全水平，且有食物，继续进食
+            console.log(`[useGameLogic] Agent still hungry (${currentAgent.stats.satiety.toFixed(1)}/${SURVIVAL_RATES.satietySafeLevel}), continue eating...`);
+            addLog(`系统：德米特里还需要更多食物（饱食度：${Math.round(currentAgent.stats.satiety)}/${SURVIVAL_RATES.satietySafeLevel}）。`, 'system');
+            
+            // 重置到达标志，允许再次触发 EATING
+            arrivalHandledRef.current.seekingFood = false;
+            
+            // 直接再次触发 SEEKING_FOOD（会立即到达并切换到 EATING）
+            setAgentState('SEEKING_FOOD');
+            setActionTarget({ x: FACILITIES.granary[0], z: FACILITIES.granary[2] });
+          } else {
+            // 饱食度已恢复或无食物，正常退出
+            if (needMoreFood && !hasFood) {
+              console.log(`[useGameLogic] No more food available, satiety: ${currentAgent.stats.satiety.toFixed(1)}`);
+              addLog('系统：⚠️ 储粮点食物不足，德米特里无法完全恢复饱食度。', 'system');
+            } else {
+              console.log(`[useGameLogic] Eating complete, satiety: ${currentAgent.stats.satiety.toFixed(1)}`);
+              addLog(`系统：德米特里已吃饱（饱食度：${Math.round(currentAgent.stats.satiety)}）。`, 'system');
+            }
+            setAgentState(arbitrateIdleOrListening());
+            setActionTarget(null);
+          }
         }, HISMA_DELAY_CONFIG.eatingMs));
       }
     } else if (agentState !== 'SEEKING_FOOD') {

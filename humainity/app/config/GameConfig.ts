@@ -154,6 +154,7 @@ export const SURVIVAL_RATES = {
   energyWork: 0.2,         // 工作时每秒精力消耗
   recoverySleep: 5.0,      // 睡眠时每秒精力恢复
   starveThreshold: 20,     // 饥饿阈值 (satiety < 20 触发 STARVING)
+  satietySafeLevel: 50,    // 饱食安全水平 (智能体进食直到达到此值)
   exhaustThreshold: 10,    // 力竭阈值 (energy < 10 触发 EXHAUSTED)
 } as const;
 

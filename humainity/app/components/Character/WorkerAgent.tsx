@@ -65,6 +65,7 @@ const WorkerAgent = forwardRef<THREE.Group, WorkerAgentProps>(function WorkerAge
     if (agentState === 'ACTING') return '🪓 ';
     if (agentState === 'THINKING') return '⚙️ ';
     if (agentState === 'LISTENING' && isNearAgent) return '👂 ';
+    if (agentState === 'IDLE') return '🚶 ';
     return '';
   };
 
@@ -274,15 +275,14 @@ const WorkerAgent = forwardRef<THREE.Group, WorkerAgentProps>(function WorkerAge
         </div>
       </Html>
 
-      {/* 选中指示器 - 倒三角 */}
+      {/* 选中指示器 - 金色倒三角 */}
       {isSelected && (
-        <Html position={[0, 1.5, 0]} center>
-          <div style={{
+        <Html position={[0, 2.2, 0]} center>
+          <div className="animate-bounce" style={{
             fontSize: '20px',
             color: '#FFD700',
-            textShadow: '0 0 4px rgba(255, 215, 0, 0.8)',
-            pointerEvents: 'none',
-            animation: 'pulse 1.5s ease-in-out infinite'
+            textShadow: '0 0 8px rgba(255, 215, 0, 0.8)',
+            pointerEvents: 'none'
           }}>
             ▼
           </div>

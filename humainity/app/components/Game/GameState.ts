@@ -180,15 +180,39 @@ export const useGameState = create<GameStore>((set) => ({
   
   // ========== Agent Actions (Genesis V0.2) ==========
   updateAgent: (id, updates) =>
-    set((state) => ({
-      agents: {
-        ...state.agents,
-        [id]: {
-          ...state.agents[id],
-          ...updates,
+    set((state) => {
+      const oldAgent = state.agents[id];
+      
+      // 检测 currentAssignment 变化时自动生成想法
+      const assignmentChanged = 
+        updates.currentAssignment && 
+        updates.currentAssignment !== oldAgent.currentAssignment;
+      
+      let newThoughtHistory = updates.thoughtHistory || oldAgent.thoughtHistory;
+      
+      if (assignmentChanged) {
+        const newThought = {
+          tick: Date.now(),
+          content: `我的新职责是 ${updates.currentAssignment}，我会尽力完成的。`,
+          trigger: '职责变更',
+          mood: 'determined'
+        };
+        // 将新想法追加到开头（最新在 index 0）
+        newThoughtHistory = [newThought, ...oldAgent.thoughtHistory].slice(0, 20);
+        console.log(`[GameState] Agent ${id} assignment changed: ${oldAgent.currentAssignment} -> ${updates.currentAssignment}`);
+      }
+      
+      return {
+        agents: {
+          ...state.agents,
+          [id]: {
+            ...oldAgent,
+            ...updates,
+            thoughtHistory: newThoughtHistory,
+          },
         },
-      },
-    })),
+      };
+    }),
   
   selectAgent: (id) => set(() => ({ selectedAgentId: id })),
   
