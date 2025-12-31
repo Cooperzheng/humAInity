@@ -1,109 +1,3 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HumAInity - 文明重燃 V1.6</title>
-    
-    <!-- 预连接 CDN 以加速资源加载 -->
-    <link rel="preconnect" href="https://cdn.bootcdn.net">
-    <link rel="preconnect" href="https://cdn.tailwindcss.com">
-    
-    <!-- 1. 引入 React 和 ReactDOM (生产版本 - 体积减少 85%) -->
-    <script crossorigin src="https://cdn.bootcdn.net/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-    <script crossorigin src="https://cdn.bootcdn.net/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-    
-    <!-- 3. 引入 Tailwind CSS (可以延迟) -->
-    <script src="https://cdn.tailwindcss.com" defer></script>
-    
-    <script>
-        // 配置 Tailwind 主题 - 保持深沉的“墨与铜”配色
-        if (typeof tailwind !== 'undefined') {
-            tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        paper: '#F2EEE5', // 羊皮纸底色
-                        ink: '#2B2B2B',   // 墨色
-                        stone: { 850: '#1C1917' },
-                        bronze: { 500: '#B08D55', 700: '#8C6B3D' }, // 青铜
-                        terracotta: '#A0522D', // 陶土红
-                    },
-                    fontFamily: {
-                        serif: ['"Noto Serif SC"', '"Songti SC"', 'SimSun', 'serif'],
-                        sans: ['"Noto Sans SC"', 'sans-serif'],
-                    }
-                }
-            }
-            };
-        }
-    </script>
-
-    <style>
-        body { font-family: 'Noto Serif SC', serif; color: #2B2B2B; }
-        h1, h2, h3, h4, h5, h6, .font-serif { font-family: 'Noto Serif SC', serif; }
-        
-        /* 浮动动画 */
-        @keyframes slowFloat {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-6px); }
-        }
-        .animate-float { animation: slowFloat 6s ease-in-out infinite; }
-        
-        /* 纹理叠加 */
-        .texture-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-image: url('https://www.transparenttextures.com/patterns/natural-paper.png');
-            opacity: 0.4; pointer-events: none; z-index: 9999; mix-blend-mode: multiply;
-        }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-        /* 加载与错误提示样式 */
-        #loading-screen {
-            position: fixed; inset: 0; background: #F2EEE5; z-index: 10000;
-            display: flex; justify-content: center; align-items: center; flex-direction: column;
-            color: #2B2B2B; transition: opacity 0.5s;
-        }
-        .spinner {
-            width: 40px; height: 40px; border: 3px solid #B08D55; border-top-color: transparent;
-            border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        
-        /* 图标脉冲动画 - 提示可悬停 */
-        @keyframes gentlePulse {
-            0%, 100% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.05); opacity: 0.9; }
-        }
-        .icon-hint-pulse {
-            animation: gentlePulse 2s ease-in-out infinite;
-        }
-        
-        /* 向下箭头动画 */
-        @keyframes bounceDown {
-            0%, 100% { transform: translateY(0); opacity: 0.7; }
-            50% { transform: translateY(10px); opacity: 1; }
-        }
-        .scroll-indicator {
-            animation: bounceDown 2s ease-in-out infinite;
-        }
-    </style>
-</head>
-<body class="bg-paper text-ink antialiased relative">
-    
-    <div class="texture-overlay"></div>
-
-    <!-- 加载遮罩 -->
-    <div id="loading-screen">
-        <div class="spinner"></div>
-        <div class="text-2xl font-serif font-bold mb-2 tracking-widest">HumAInity</div>
-        <div class="text-sm opacity-70 italic">正在重构文明逻辑...</div>
-    </div>
-    
-    <div id="root"></div>
-
-    <script>
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const {
   useState,
@@ -1193,7 +1087,6 @@ const ArtStyleSection = () => {
   }, /*#__PURE__*/React.createElement("img", {
     src: "https://i2.hdslb.com/bfs/article/watermark/2e0c984a36f0fa2a41a500a8ce23e4d59fc1bb99.png@1192w.avif",
     alt: "Top-down Stylized View",
-    loading: "lazy",
     className: "w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
   }), /*#__PURE__*/React.createElement("div", {
     className: "absolute top-4 left-4 bg-bronze-600 text-white text-xs font-bold px-3 py-1 uppercase tracking-wider shadow-sm"
@@ -1210,7 +1103,6 @@ const ArtStyleSection = () => {
   }, /*#__PURE__*/React.createElement("img", {
     src: "https://i.imgur.com/4X5zAas.png",
     alt: "3D Immersive Realistic View",
-    loading: "lazy",
     className: "w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
   }), /*#__PURE__*/React.createElement("div", {
     className: "absolute top-4 left-4 bg-ink text-white text-xs font-bold px-3 py-1 uppercase tracking-wider shadow-sm"
@@ -1346,7 +1238,3 @@ const App = () => {
 };
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(/*#__PURE__*/React.createElement(App, null));
-
-    </script>
-</body>
-</html>

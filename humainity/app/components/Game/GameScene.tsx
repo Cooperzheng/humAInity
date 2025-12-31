@@ -1,8 +1,9 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, OrthographicCamera } from '@react-three/drei';
+import * as THREE from 'three';
 import { Ground, Mountain, Water, ZoneBoundaries, Bonfire, Granary } from '../World/Environment';
 import ResourceTile, { ResourceType } from '../World/ResourceTile';
 import PlayerLeader from '../Character/PlayerLeader';
@@ -18,6 +19,7 @@ import { WORLD_CONFIG, RESOURCE_CONFIG, CAMERA_CONFIG, FACILITIES, getSettlement
 function GameSceneInner({ leaderName }: { leaderName: string }) {
   const playerRef = useRef<THREE.Group>(null);
   const agentRef = useRef<THREE.Group>(null);
+  const controlsRef = useRef<any>(null);
   const { isNearAgent, agents, selectedAgentId, selectAgent, deselectAgent } = useGameState();
   
   // Genesis V0.2: 从 agents 字典获取 dmitri 的状态
@@ -65,6 +67,15 @@ function GameSceneInner({ leaderName }: { leaderName: string }) {
     resources,
     setResources,
     leaderName
+  });
+
+  // 摄像机跟随玩家：每帧更新 OrbitControls 的 target 为玩家位置
+  useFrame(() => {
+    if (controlsRef.current && playerRef.current) {
+      const playerPosition = playerRef.current.position;
+      controlsRef.current.target.set(playerPosition.x, playerPosition.y, playerPosition.z);
+      controlsRef.current.update();
+    }
   });
 
   return (
@@ -143,6 +154,8 @@ function GameSceneInner({ leaderName }: { leaderName: string }) {
       
       {/* 轨道控制 */}
       <OrbitControls
+        ref={controlsRef}
+        target={[3, 0, 0]} // 玩家初始位置
         enablePan={true}
         enableZoom={true}
         enableRotate={true}
